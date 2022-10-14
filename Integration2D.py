@@ -13,25 +13,39 @@ from network import *
 from integrator import *
 from transform import *
 from couplings import *
+from utils import pyhocon_wrapper
 
 torch.set_default_dtype(torch.float32)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+
+def parse_args(arg=sys.argv[1:]):
+    train_parser = argparse.ArgumentParser(
+        description='Application for model training')
+
+    train_parser.add_argument(
+        '-c', '--config', required=True,
+        help='Configuration file path')
+
+    return train_parser.parse_args(arg)
+
+
 class Integration2D:
-    def __init__(self,epochs,batch_size,lr,hidden_dim,n_coupling_layers,n_hidden_layers,funcname,blob,loss_func,piecewise_bins,save_plt_interval,plot_dir_name):
-        self.epochs             = epochs
-        self.batch_size         = batch_size
-        self.lr                 = lr
-        self.hidden_dim         = hidden_dim
-        self.n_coupling_layers  = n_coupling_layers
-        self.n_hidden_layers    = n_hidden_layers
-        self.blob               = blob
-        self.piecewise_bins     = piecewise_bins  
-        self.loss_func          = loss_func
-        self.save_plt_interval  = save_plt_interval
-        self.plot_dir_name      = plot_dir_name
-        self.function           = getattr(functions,funcname)(n=2)
+    def __init__(self, cfg):
+        self.config = cfg
+        self.epochs = self.config.get_int('train.epochs')
+        self.batch_size = self.config.get_int('train.batch_size')
+        self.lr = self.config.get_float('train.learning_rate')
+        self.hidden_dim = self.config.get_int('train.num_hidden_dims')
+        self.n_coupling_layers = self.config.get_int('train.num_coupling_layers')
+        self.n_hidden_layers = self.config.get_int('train.num_hidden_layers')
+        self.blob = self.config.get_int('train.num_blob_bins', 0)
+        self.piecewise_bins = self.config.get_int('train.num_piecewise_bins', 10)
+        self.loss_func = self.config.get_string('train.loss', 'MSE')
+        self.save_plt_interval = self.config.get_int('train.save_plt_interval', 5)
+        self.plot_dir_name = self.config.get_string('train.plot_dir_name')
+        self.function = getattr(functions, self.config.get_string('train.function'))(n=2)
 
         self._run()
 
@@ -64,7 +78,7 @@ class Integration2D:
         lr_min = 1e-6
 
         # Visualization plot #
-        self.visObject = visualize('Plots/'+self.plot_dir_name)
+        self.visObject = visualize(self.plot_dir_name)
 
         self.grid_x1 , self.grid_x2 = torch.meshgrid(torch.linspace(0,1,100),torch.linspace(0,1,100))
         grid = torch.cat([self.grid_x1.reshape(-1,1),self.grid_x2.reshape(-1,1)],axis=1)
@@ -219,50 +233,8 @@ class Integration2D:
             print ('..... '+('Model %s'%model).ljust(40,' ')+'Integral : %0.8f +/- %0.8f'%(self.mean_wgt[model],self.err_wgt[model]))
 
 
+options = parse_args()
+config = pyhocon_wrapper.parse_file(options.config)
 
-parser = argparse.ArgumentParser(description="Integration of 2D function")
-general = parser.add_argument_group('Global arguments')
-
-general.add_argument('--save_plt_interval', action='store', required=False, type=int, default=5,
-                    help="Frequency for plot saving (default : 5)")
-general.add_argument('--dirname', action='store', required=True, type=str,
-                    help="Directory name for the plots")
-
-NIS = parser.add_argument_group('Arguments for the integration for the Neural Importance Sampling')
-NIS.add_argument('-f','--function', action='store', required=True,
-                    help="Name of the function in functions.py to use for integration")
-NIS.add_argument('-e','--epochs', action='store', required=True, type=int,
-                    help="Number of epochs")
-NIS.add_argument('-b','--batch_size', action='store', required=True, type=int,
-                    help="Batch size")
-NIS.add_argument('-lr','--lr', action='store', required=True, type=float,
-                    help="Learning rate")
-NIS.add_argument('-N','--hidden_dim', action='store', required=True, type=int,
-                    help="Number of neurons per layer in the coupling layers")
-NIS.add_argument('-nc','--n_coupling_layers', action='store', required=True, type=int,
-                    help="Number of coupling layers")
-NIS.add_argument('-nh','--n_hidden_layers', action='store', required=True, type=int,
-                    help="Number of hidden layers in coupling layers")
-NIS.add_argument('--blob', action='store', required=False, type=int,
-                    help="Number of bins for blob-encoding (default = None)")
-NIS.add_argument('--piecewise', action='store', required=False, type=int, default=10,
-                    help="Number of bins for piecewise polynomial coupling (default = 10)")
-NIS.add_argument('--loss', action='store', required=False, type=str, default="MSE",
-                    help="Name of the loss function in divergences (default = MSE)")
-
-
-args = parser.parse_args()
-
-instance = Integration2D(epochs             = args.epochs,
-                         batch_size         = args.batch_size,
-                         lr                 = args.lr,
-                         hidden_dim         = args.hidden_dim,
-                         n_coupling_layers  = args.n_coupling_layers,
-                         n_hidden_layers    = args.n_hidden_layers,
-                         blob               = args.blob,
-                         piecewise_bins     = args.piecewise,
-                         loss_func          = args.loss,
-                         save_plt_interval  = args.save_plt_interval,
-                         plot_dir_name      = args.dirname,
-                         funcname           = args.function)
+instance = Integration2D(config)
 
