@@ -14,14 +14,12 @@ from integrator import *
 from transform import *
 from couplings import *
 
-from catch_cuba import CatchCuba
-
 torch.set_default_dtype(torch.float32)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Integration2D:
-    def __init__(self,epochs,batch_size,lr,hidden_dim,n_coupling_layers,n_hidden_layers,funcname,blob,loss_func,piecewise_bins,save_plt_interval,plot_dir_name,cuba):
+    def __init__(self,epochs,batch_size,lr,hidden_dim,n_coupling_layers,n_hidden_layers,funcname,blob,loss_func,piecewise_bins,save_plt_interval,plot_dir_name):
         self.epochs             = epochs
         self.batch_size         = batch_size
         self.lr                 = lr
@@ -34,7 +32,6 @@ class Integration2D:
         self.save_plt_interval  = save_plt_interval
         self.plot_dir_name      = plot_dir_name
         self.function           = getattr(functions,funcname)(n=2)
-        self.use_cuba           = cuba
 
         self._run()
 
@@ -123,16 +120,6 @@ class Integration2D:
 #                                                   optimizer   = piecewiseCubicOptimizer,
 #                                                   scheduler   = piecewiseCubicScheduler,
 #                                                   loss_func   = self.loss_func)
-        #----- Cuba -----#
-        if self.use_cuba:
-            cuba = CatchCuba(func       = self.function.name,
-                             ndim       = 2,
-                             nstart     = self.batch_size,
-                             nincrease  = 0,
-                             maxeval    = self.epochs*self.batch_size,
-                             epsrel     = 0)
-            self.cuba_points = cuba.getPointSets()
-            self.cuba_integral = cuba.getIntegralValues()
 
         #---- Dictioniary -----#
         self.integrator_dict = {'Uniform'               : None,
@@ -141,8 +128,6 @@ class Integration2D:
                                 #'Piecewise Linear'     : self.piecewiseLinearIntegrator,
                                 #'Piecewise Quadratic'  : self.piecewiseQuadraticIntegrator,
                                 #'Piecewise Cubic'      : self.piecewiseCubicIntegrator}
-        if self.use_cuba:
-            self.integrator_dict['Cuba'] = None
 
         self.means = {k:[] for k in self.integrator_dict.keys()}
         self.errors = {k:[] for k in self.integrator_dict.keys()}
@@ -166,44 +151,35 @@ class Integration2D:
         for epoch in range(1,self.epochs+1):
             print ("Epoch %d/%d [%0.2f%%]"%(epoch,self.epochs,epoch/self.epochs*100))
             # loop over models#
-            for model, integrator in self.integrator_dict.items():  
-                if model == "Cuba":
-                    cuba_res = self.cuba_integral[epoch*self.batch_size] # [mean,error,chi2,dof]
-                    cuba_pts = self.cuba_points[epoch*self.batch_size]
-                    mean_wgt = cuba_res[0]
-                    err_wgt = cuba_res[1]
-                    x = np.array(cuba_pts)
+            for model, integrator in self.integrator_dict.items():
+                if model == "Uniform": # Use uniform sampling
+                    x = self.dist.sample((self.batch_size,))
+                    y = self.function(x)
+                    x = x.data.numpy()
+                    mean = torch.mean(y).item()
+                    error = torch.sqrt(torch.var(y)/(self.batch_size-1.)).item()
                     loss = 0.
                     lr = 0.
-                else:
-                    if model == "Uniform": # Use uniform sampling
-                        x = self.dist.sample((self.batch_size,))
-                        y = self.function(x)
-                        x = x.data.numpy()
-                        mean = torch.mean(y).item()
-                        error = torch.sqrt(torch.var(y)/(self.batch_size-1.)).item()
-                        loss = 0.
-                        lr = 0.
-                    else: # use NIS
-                        # Integrate on one epoch and produce resuts #
-                        result_dict = integrator.train_one_step(self.batch_size,lr=True,integral=True,points=True)
-                        loss = result_dict['loss']
-                        lr = result_dict['lr']
-                        mean = result_dict['mean']
-                        error = result_dict['uncertainty']
-                        z = result_dict['z'].data.numpy()
-                        x = result_dict['x'].data.numpy()
+                else: # use NIS
+                    # Integrate on one epoch and produce resuts #
+                    result_dict = integrator.train_one_step(self.batch_size,lr=True,integral=True,points=True)
+                    loss = result_dict['loss']
+                    lr = result_dict['lr']
+                    mean = result_dict['mean']
+                    error = result_dict['uncertainty']
+                    z = result_dict['z'].data.numpy()
+                    x = result_dict['x'].data.numpy()
 
-                    # Record values #
-                    self.means[model].append(mean)
-                    self.errors[model].append(error)
+                # Record values #
+                self.means[model].append(mean)
+                self.errors[model].append(error)
 
-                    # Combine all mean and errors 
-                    mean_wgt = np.sum(self.means[model]/np.power(self.errors[model],2),axis=-1)
-                    err_wgt = np.sum(1./(np.power(self.errors[model],2)), axis=-1)
-                    mean_wgt /= err_wgt
-                    err_wgt = 1/np.sqrt(err_wgt)
-            
+                # Combine all mean and errors
+                mean_wgt = np.sum(self.means[model]/np.power(self.errors[model],2),axis=-1)
+                err_wgt = np.sum(1./(np.power(self.errors[model],2)), axis=-1)
+                mean_wgt /= err_wgt
+                err_wgt = 1/np.sqrt(err_wgt)
+
                 # Record and print #
                 self.mean_wgt[model] = mean_wgt
                 self.err_wgt[model] = err_wgt
@@ -211,7 +187,7 @@ class Integration2D:
                 print("\t"+(model+' ').ljust(25,'.')+("Loss = %0.8f"%loss).rjust(20,' ')+("\t(LR = %0.8f)"%lr).ljust(20,' ')+("Integral = %0.8f +/- %0.8f"%(self.mean_wgt[model],self.err_wgt[model])))
 
                 # Visualization #
-                self.visObject.AddCurves(x = epoch,x_err = 0, title = model+" model", 
+                self.visObject.AddCurves(x = epoch,x_err = 0, title = model+" model",
                                          dict_val = {'$I_{numeric}$': [mean_wgt,err_wgt],'$I_{analytic}$':[self.function.integral,self.function.integral_error]})
                 if self.bins2D[model] is None:
                     self.bins2D[model], x_edges, y_edges  = np.histogram2d(x[:,0],x[:,1],bins=20,range=[[0,1],[0,1]])
@@ -273,14 +249,9 @@ NIS.add_argument('--piecewise', action='store', required=False, type=int, defaul
                     help="Number of bins for piecewise polynomial coupling (default = 10)")
 NIS.add_argument('--loss', action='store', required=False, type=str, default="MSE",
                     help="Name of the loss function in divergences (default = MSE)")
-NIS.add_argument('--cuba', action='store_true', required=False, default=False,
-                    help="Wether to use integration with Cuba (default = False)")
 
 
 args = parser.parse_args()
-
-if args.cuba:
-    print("[WARNING] Do not forget to add cuba library to library path (source cubaLink.sh)")
 
 instance = Integration2D(epochs             = args.epochs,
                          batch_size         = args.batch_size,
@@ -293,6 +264,5 @@ instance = Integration2D(epochs             = args.epochs,
                          loss_func          = args.loss,
                          save_plt_interval  = args.save_plt_interval,
                          plot_dir_name      = args.dirname,
-                         funcname           = args.function,
-                         cuba               = args.cuba)
+                         funcname           = args.function)
 
