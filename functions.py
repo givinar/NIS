@@ -1,10 +1,6 @@
-import os
-import sys
+import abc
 import torch
-import numpy as np
 import math
-import matplotlib
-import matplotlib.pyplot as plt 
 
 alpha = 0.2
 p1 = 0.4
@@ -14,6 +10,26 @@ w = 1/0.004
 a = 3
 R1 = 0.20
 R2 = 0.45
+
+
+class Function(abc.ABC):
+
+    @abc.abstractmethod
+    def __call__(self, x):
+        pass
+
+    @abc.abstractmethod
+    def integral(self):
+        pass
+
+    @abc.abstractmethod
+    def integral_error(self):
+        pass
+
+    @abc.abstractmethod
+    def name(self):
+        pass
+
 
 class Gaussian:
     def __init__(self,n,alpha=alpha):
