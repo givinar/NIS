@@ -11,7 +11,7 @@ from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
 from couplings import PiecewiseLinearCouplingTransform, PiecewiseQuadraticCouplingTransform, \
-    PiecewiseCubicCouplingTransform
+    PiecewiseCubicCouplingTransform, AdditiveCouplingTransform, AffineCouplingTransform
 from integrator import Integrator
 import functions
 from network import MLP
@@ -80,7 +80,11 @@ def create_base_transform(mask, coupling_name, hidden_dim, n_hidden_layers, blob
                                                                     hidden_sizes=[hidden_dim] * n_hidden_layers,
                                                                     hidden_activation=nn.ReLU(),
                                                                     output_activation=None)
-    if coupling_name == 'piecewiseLinear':
+    if coupling_name == 'additive':
+        return AdditiveCouplingTransform(mask, transform_net_create_fn, blob)
+    elif coupling_name == 'affine':
+        return AffineCouplingTransform(mask, transform_net_create_fn, blob)
+    elif coupling_name == 'piecewiseLinear':
         return PiecewiseLinearCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins)
     elif coupling_name == 'piecewiseQuadratic':
         return PiecewiseQuadraticCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins)
