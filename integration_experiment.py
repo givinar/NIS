@@ -9,7 +9,6 @@ import numpy as np
 import torch
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
-import wandb
 
 from couplings import PiecewiseLinearCouplingTransform, PiecewiseQuadraticCouplingTransform, \
     PiecewiseCubicCouplingTransform
@@ -56,7 +55,7 @@ class ExperimentConfig:
     wandb_project: Union[str, None] = None
 
     @classmethod
-    def init_from_pyhocon(cls, pyhocon_config):
+    def init_from_pyhocon(cls, pyhocon_config: pyhocon_wrapper.ConfigTree):
         return ExperimentConfig(epochs=pyhocon_config.get_int('train.epochs'),
                                 batch_size=pyhocon_config.get_int('train.batch_size'),
                                 lr=pyhocon_config.get_float('train.learning_rate'),
@@ -116,6 +115,7 @@ def run_experiment(config: ExperimentConfig):
 
     logs_dir = os.path.join('logs', config.experiment_dir_name)
     if config.wandb_project is not None:
+        import wandb
         wandb.tensorboard.patch(root_logdir=logs_dir)
         wandb.init(project=config.wandb_project, config=asdict(config), sync_tensorboard=True,
                    entity="neural_importance_sampling")
