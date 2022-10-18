@@ -38,7 +38,8 @@ class ExperimentConfig:
     save_plt_interval: Frequency for plot saving (default : 10)
     wandb_project: Name of wandb project in neural_importance_sampling team
     """
-    experiment_dir_name: str = f"test_{datetime.now()}"
+
+    experiment_dir_name: str = f"test_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     ndims: int = 3
     funcname: str = "Gaussian"
     coupling_name: str = "piecewiseQuadratic"
@@ -66,7 +67,7 @@ class ExperimentConfig:
                                 piecewise_bins=pyhocon_config.get_int('train.num_piecewise_bins', 10),
                                 loss_func=pyhocon_config.get_string('train.loss', 'MSE'),
                                 save_plt_interval=pyhocon_config.get_int('train.save_plt_interval', 5),
-                                experiment_dir_name=pyhocon_config.get_string('train.plot_dir_name'),
+                                experiment_dir_name=pyhocon_config.get_string('train.plot_dir_name', cls.experiment_dir_name),
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
                                 wandb_project=pyhocon_config.get_string('train.wandb_project', None)
@@ -203,4 +204,4 @@ if __name__ == '__main__':
     options = parse_args()
     config = pyhocon_wrapper.parse_file(options.config)
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
-    run_experiment(ExperimentConfig())
+    run_experiment(experiment_config)
