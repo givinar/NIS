@@ -37,6 +37,7 @@ class ExperimentConfig:
     batch_size: Batch size
     save_plt_interval: Frequency for plot saving (default : 10)
     wandb_project: Name of wandb project in neural_importance_sampling team
+    use_tensorboard: Use tensorboard logging
     """
 
     experiment_dir_name: str = f"test_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
@@ -54,6 +55,7 @@ class ExperimentConfig:
 
     save_plt_interval: int = 10
     wandb_project: Union[str, None] = None
+    use_tensorboard: bool = False
 
     @classmethod
     def init_from_pyhocon(cls, pyhocon_config: pyhocon_wrapper.ConfigTree):
@@ -70,7 +72,8 @@ class ExperimentConfig:
                                 experiment_dir_name=pyhocon_config.get_string('train.plot_dir_name', cls.experiment_dir_name),
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
-                                wandb_project=pyhocon_config.get_string('train.wandb_project', None)
+                                wandb_project=pyhocon_config.get_string('train.wandb_project', None),
+                                use_tensorboard=pyhocon_config.get_bool('train.use_tensorboard', False)
                                 )
 
 
@@ -119,14 +122,16 @@ def create_binary_mask(ndims):
 def run_experiment(config: ExperimentConfig):
 
     logs_dir = os.path.join('logs', config.experiment_dir_name)
-    if config.wandb_project is not None:
-        import wandb
-        wandb.tensorboard.patch(root_logdir=logs_dir)
-        wandb.init(project=config.wandb_project, config=asdict(config), sync_tensorboard=True,
-                   entity="neural_importance_sampling")
     visObject = visualize(os.path.join(logs_dir, 'plots'))
-    tb_writer = SummaryWriter(log_dir=logs_dir)
-    tb_writer.add_text("Config", '\n'.join([f"{k.rjust(20, ' ')}: {v}" for k, v in asdict(config).items()]))
+
+    if config.use_tensorboard:
+        if config.wandb_project is not None:
+            import wandb
+            wandb.tensorboard.patch(root_logdir=logs_dir)
+            wandb.init(project=config.wandb_project, config=asdict(config), sync_tensorboard=True,
+                       entity="neural_importance_sampling")
+        tb_writer = SummaryWriter(log_dir=logs_dir)
+        tb_writer.add_text("Config", '\n'.join([f"{k.rjust(20, ' ')}: {v}" for k, v in asdict(config).items()]))
 
     function: functions.Function = getattr(functions, config.funcname)(n=config.ndims)
     masks = create_binary_mask(config.ndims)
@@ -184,9 +189,10 @@ def run_experiment(config: ExperimentConfig):
         visObject.AddCurves(x=epoch, x_err=0, title="Integral value", dict_val=dict_val)
         visObject.AddCurves(x=epoch, x_err=0, title="Integral uncertainty", dict_val=dict_error)
 
-        tb_writer.add_scalar('Train/Loss', loss, epoch)
-        tb_writer.add_scalar('Train/Integral', mean_wgt, epoch)
-        tb_writer.add_scalar('Train/LR', lr, epoch)
+        if config.use_tensorboard:
+            tb_writer.add_scalar('Train/Loss', loss, epoch)
+            tb_writer.add_scalar('Train/Integral', mean_wgt, epoch)
+            tb_writer.add_scalar('Train/LR', lr, epoch)
 
         # Plot function output #
         if epoch % config.save_plt_interval == 0:
