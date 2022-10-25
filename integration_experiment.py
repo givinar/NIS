@@ -154,6 +154,12 @@ def run_experiment(config: ExperimentConfig):
                             scheduler=scheduler,
                             loss_func=config.loss_func)
 
+    if config.ndims == 2:  # if 2D -> prepare x1,x2 gird for visualize
+        grid_x1, grid_x2 = torch.meshgrid(torch.linspace(0, 1, 100), torch.linspace(0, 1, 100))
+        grid = torch.cat([grid_x1.reshape(-1, 1), grid_x2.reshape(-1, 1)], axis=1)
+        func_out = function(grid).reshape(100, 100)
+
+    bins = None
     means = []
     errors = []
     for epoch in range(1, config.epochs + 1):
@@ -189,6 +195,20 @@ def run_experiment(config: ExperimentConfig):
         visObject.AddCurves(x=epoch, x_err=0, title="Integral value", dict_val=dict_val)
         visObject.AddCurves(x=epoch, x_err=0, title="Integral uncertainty", dict_val=dict_error)
 
+        if config.ndims == 2:  # if 2D -> visualize distribution
+            if bins is None:
+                bins, x_edges, y_edges = np.histogram2d(x[:, 0], x[:, 1], bins=20, range=[[0, 1], [0, 1]])
+            else:
+                newbins, x_edges, y_edges = np.histogram2d(x[:, 0], x[:, 1], bins=20, range=[[0, 1], [0, 1]])
+                bins += newbins.T
+            x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+            y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+            x_centers, y_centers = np.meshgrid(x_centers, y_centers)
+            visObject.AddPointSet(x, title="Observed $x$ %s" % config.coupling_name, color='b')
+            visObject.AddContour(x_centers, y_centers, bins, "Cumulative %s" % config.coupling_name)
+            visObject.AddPointSet(z, title="Latent space $z$", color='b')
+
+
         if config.use_tensorboard:
             tb_writer.add_scalar('Train/Loss', loss, epoch)
             tb_writer.add_scalar('Train/Integral', mean_wgt, epoch)
@@ -196,6 +216,10 @@ def run_experiment(config: ExperimentConfig):
 
         # Plot function output #
         if epoch % config.save_plt_interval == 0:
+            if config.ndims == 2:
+                visObject.AddPointSet(z, title="Latent space $z$", color='b')
+                visObject.AddContour(grid_x1, grid_x2, func_out,
+                                     "Target function : " + function.name)
             visObject.MakePlot(epoch)
 
 
