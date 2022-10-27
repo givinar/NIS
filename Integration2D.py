@@ -43,8 +43,8 @@ class Integration2D:
         self.blob = self.config.get_int('train.num_blob_bins', 0)
         self.piecewise_bins = self.config.get_int('train.num_piecewise_bins', 10)
         self.loss_func = self.config.get_string('train.loss', 'MSE')
-        self.save_plt_interval = self.config.get_int('train.save_plt_interval', 5)
-        self.plot_dir_name = self.config.get_string('train.plot_dir_name')
+        self.save_plt_interval = self.config.get_int('logging.save_plt_interval', 5)
+        self.plot_dir_name = self.config.get_string('logging.plot_dir_name')
         self.function = getattr(functions, self.config.get_string('train.function'))(n=2)
 
         self._run()

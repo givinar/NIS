@@ -68,12 +68,12 @@ class ExperimentConfig:
                                 blob=pyhocon_config.get_int('train.num_blob_bins', 0),
                                 piecewise_bins=pyhocon_config.get_int('train.num_piecewise_bins', 10),
                                 loss_func=pyhocon_config.get_string('train.loss', 'MSE'),
-                                save_plt_interval=pyhocon_config.get_int('train.save_plt_interval', 5),
-                                experiment_dir_name=pyhocon_config.get_string('train.plot_dir_name', cls.experiment_dir_name),
+                                save_plt_interval=pyhocon_config.get_int('logging.save_plt_interval', 5),
+                                experiment_dir_name=pyhocon_config.get_string('logging.plot_dir_name', cls.experiment_dir_name),
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
-                                wandb_project=pyhocon_config.get_string('train.wandb_project', None),
-                                use_tensorboard=pyhocon_config.get_bool('train.use_tensorboard', False)
+                                wandb_project=pyhocon_config.get_string('logging.tensorboard.wandb_project', None),
+                                use_tensorboard=pyhocon_config.get_bool('logging.tensorboard.use_tensorboard', False)
                                 )
 
 
