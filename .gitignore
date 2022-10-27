@@ -3,4 +3,4 @@ Plots/
 __pycache__/
 logs/
 wandb/
-
+config/
