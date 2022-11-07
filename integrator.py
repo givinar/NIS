@@ -10,7 +10,8 @@ class Integrator():
     Free inspiration from :
         https://gitlab.com/i-flow/i-flow/, arXiv:2001.05486 (Tensorflow)
     """
-    def __init__(self, func, flow, dist, optimizer, scheduler=None, loss_func=None, **kwargs):
+    def __init__(self, func, flow, dist, optimizer, scheduler=None, loss_func=None,
+                 device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"), **kwargs):
         """ Initialize the normalizing flow integrator. 
         Args:
             - func : function to be integrated
@@ -20,17 +21,18 @@ class Integrator():
             - scheduler (optional) : scheduler from PyTorch for LR decay
             - loss_func : name of loss function to be taken from divergences
             - kwargs : additional arguments for the loss
-        """         
-        self._func          = func         
-        self.global_step    = 0         
-        self.flow           = flow
-        self.dist           = dist
-        self.optimizer      = optimizer
-        self.scheduler      = scheduler
-        self.divergence     = Divergence(**kwargs)
+        """
+        self.device = device
+        self._func = func
+        self.global_step = 0
+        self.flow = flow.to(device)
+        self.dist: torch.distributions.Distribution = dist
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.divergence = Divergence(**kwargs)
         if loss_func not in self.divergence.avail:
             raise RuntimeError("Requested loss function not found in class methods")
-        self.loss_func      = getattr(self.divergence,loss_func)
+        self.loss_func = getattr(self.divergence, loss_func)
 
     def train_one_step(self, nsamples, lr=None,points=False,integral=False):
         """ Perform one step of integration and improve the sampling.         
@@ -51,8 +53,8 @@ class Integrator():
         self.optimizer.zero_grad()
         
         # Sample #
-        z = self.dist.sample((nsamples,)) 
-        log_prob = self.dist.log_prob(z)
+        z = self.dist.sample((nsamples,)).to(self.device)
+        # log_prob = self.dist.log_prob(z)
             # In practice for uniform dist, log_prob = 0 and absdet is multiplied by 1
             # But in the future we might change sampling dist so good to have
 
@@ -73,15 +75,15 @@ class Integrator():
         self.global_step += 1
 
         # Integral #
-        return_dict = {'loss':loss.item()}
+        return_dict = {'loss': loss.to('cpu').item()}
         if lr:
             return_dict['lr'] = self.optimizer.param_groups[0]['lr']
         if integral:
-            return_dict['mean'] = mean.item()
-            return_dict['uncertainty'] = torch.sqrt(var/(nsamples-1.)).item()
+            return_dict['mean'] = mean.to('cpu').item()
+            return_dict['uncertainty'] = torch.sqrt(var/(nsamples-1.)).to('cpu').item()
         if points:
-            return_dict['z'] = z
-            return_dict['x'] = x
+            return_dict['z'] = z.to('cpu')
+            return_dict['x'] = x.to('cpu')
         return return_dict
 
     def sample(self, nsamples, latent=False,jacobian=False):
@@ -93,7 +95,7 @@ class Integrator():
             - jacobian(bool): return set of points with associated jacobian in a tuple
         Returns:  tf.tensor of size (nsamples, ndim) of sampled points, and jacobian(optional).
         """
-        z = self.dist.sample((nsamples,)) 
+        z = self.dist.sample((nsamples,))
         if latent:
             return z
         else:

@@ -33,7 +33,7 @@ class CompositeTransform(Transform):
     def _cascade(inputs, funcs, context):
         batch_size = inputs.shape[0]
         outputs = inputs
-        total_absdet = torch.ones(batch_size)
+        total_absdet = torch.ones(batch_size, device=inputs.device)
         for func in funcs:
             outputs, absdet = func(outputs, context)
             total_absdet *= absdet
