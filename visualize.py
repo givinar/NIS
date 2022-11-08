@@ -85,16 +85,7 @@ class visualize:
         if len(self.data_dict.keys()) != 0:
             for att,data in self.data_dict.items():
                 title = att[0]
-                color = att[1]
-                if len(data) == 2:
-                    assert len(color) == 2
-                    d1 = data[0]
-                    d2 = data[1]
-                    axs[idx_vert,idx_data].scatter(x=d1[:,0],y=d1[:,1],c=color[0],marker='o',s=1)
-                    axs[idx_vert,idx_data].scatter(x=d2[:,0],y=d2[:,1],c=color[1],marker='o',s=1)
-                    axs[idx_vert,idx_data].quiver(d1[:,0],d1[:,1],(d2-d1)[:,0],(d2-d1)[:,1],scale=1,width=0.0005,angles='xy', scale_units='xy')
-                else:
-                    axs[idx_vert,idx_data].scatter(x=data[:,0],y=data[:,1],c=att[1],marker='o',s=1)
+                axs[idx_vert,idx_data].scatter(x=data[:,0],y=data[:,1],c=att[1],marker='o',s=1)
                 axs[idx_vert,idx_data].set_title(title,fontsize=20)
                 axs[idx_vert,idx_data].set_xlim(0,1)
                 axs[idx_vert,idx_data].set_ylim(0,1)
