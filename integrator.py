@@ -95,15 +95,15 @@ class Integrator():
             - jacobian(bool): return set of points with associated jacobian in a tuple
         Returns:  tf.tensor of size (nsamples, ndim) of sampled points, and jacobian(optional).
         """
-        z = self.dist.sample((nsamples,))
+        z = self.dist.sample((nsamples,)).to(self.device)
         if latent:
-            return z
+            return z.to('cpu')
         else:
             x, absdet = self.flow(z)
             if jacobian:
-                return (x, absdet)
+                return (x.to('cpu'), absdet.to('cpu'))
             else:
-                return x
+                return x.to('cpu')
 
     def integrate(self, nsamples):
         """ 
@@ -123,14 +123,14 @@ class Integrator():
             tuple of 2 floats: mean and variance
 
         """
-        z = self.dist.sample((nsamples,))
+        z = self.dist.sample((nsamples,)).to(self.device)
         with torch.no_grad():
             x, absdet = self.flow(z)
             y = self._func(x)
             mean = torch.mean(y/absdet)
             var = torch.var(y/absdet)
 
-        return mean.item(),torch.sqrt(var/(nsamples-1.)).item()
+        return mean.to('cpu').item(), torch.sqrt(var/(nsamples-1.)).to('cpu').item()
             
     def sample_weights(self, nsamples, yield_samples=False):
         """ 
@@ -152,14 +152,14 @@ class Integrator():
             (samples: tf.tensor of size (nsamples, ndims) of sampled points)
 
         """
-        z = self.dist.sample((nsamples,))
+        z = self.dist.sample((nsamples,)).to(self.device)
         x, absdet = self.flow(z)
         y = self._func(x)
 
         if yield_samples:
-            return y/absdet, x
+            return (y/absdet).to('cpu'), x.to('cpu')
 
-        return y/absdet
+        return (y/absdet).to('cpu')
         
         
         
