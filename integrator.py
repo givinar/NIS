@@ -1,6 +1,8 @@
 import sys
 import numpy as no
 import torch
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 from divergences import Divergence
 
