@@ -38,7 +38,7 @@ class Gaussian:
     def __call__(self,x):
         assert self.n == x.shape[1]
         pre = 1./(self.alpha*math.sqrt(math.pi))**self.n
-        mu = torch.tensor([0.5]*self.n)
+        mu = torch.tensor([0.5]*self.n, device=x.device)
         exp = torch.exp(-(x-mu).pow(2).sum(1)/self.alpha**2)
         return exp*pre
     @property
