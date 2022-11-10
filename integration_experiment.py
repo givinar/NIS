@@ -17,7 +17,7 @@ import functions
 from network import MLP
 from transform import CompositeTransform
 from utils import pyhocon_wrapper
-from visualize import visualize
+from visualize import visualize, FunctionVisualizer
 
 
 @dataclass
@@ -38,6 +38,8 @@ class ExperimentConfig:
     save_plt_interval: Frequency for plot saving (default : 10)
     wandb_project: Name of wandb project in neural_importance_sampling team
     use_tensorboard: Use tensorboard logging
+    save_plots: save plots if ndims >= 2
+    plot_dimension: add 2d or 3d plot
     """
 
     experiment_dir_name: str = f"test_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
@@ -56,6 +58,8 @@ class ExperimentConfig:
     save_plt_interval: int = 10
     wandb_project: Union[str, None] = None
     use_tensorboard: bool = False
+    save_plots: blob = True
+    plot_dimension: int = 2
 
     @classmethod
     def init_from_pyhocon(cls, pyhocon_config: pyhocon_wrapper.ConfigTree):
@@ -73,7 +77,9 @@ class ExperimentConfig:
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
                                 wandb_project=pyhocon_config.get_string('logging.tensorboard.wandb_project', None),
-                                use_tensorboard=pyhocon_config.get_bool('logging.tensorboard.use_tensorboard', False)
+                                use_tensorboard=pyhocon_config.get_bool('logging.tensorboard.use_tensorboard', False),
+                                save_plots=pyhocon_config.get_bool('logging.save_plots', False),
+                                plot_dimension=pyhocon_config.get_int('logging.plot_dimension', 2),
                                 )
 
 
@@ -154,12 +160,10 @@ def run_experiment(config: ExperimentConfig):
                             scheduler=scheduler,
                             loss_func=config.loss_func)
 
-    if config.ndims == 2:  # if 2D -> prepare x1,x2 gird for visualize
-        grid_x1, grid_x2 = torch.meshgrid(torch.linspace(0, 1, 100), torch.linspace(0, 1, 100))
-        grid = torch.cat([grid_x1.reshape(-1, 1), grid_x2.reshape(-1, 1)], axis=1)
-        func_out = function(grid).reshape(100, 100)
+    if config.save_plots and config.ndims >= 2:
+        function_visualizer = FunctionVisualizer(vis_object=visObject, function=function, input_dimension=config.ndims,
+                                                 max_plot_dimension=config.plot_dimension)
 
-    bins = None
     means = []
     errors = []
     for epoch in range(1, config.epochs + 1):
@@ -195,19 +199,10 @@ def run_experiment(config: ExperimentConfig):
         visObject.AddCurves(x=epoch, x_err=0, title="Integral value", dict_val=dict_val)
         visObject.AddCurves(x=epoch, x_err=0, title="Integral uncertainty", dict_val=dict_error)
 
-        if config.ndims == 2:  # if 2D -> visualize distribution
-            if bins is None:
-                bins, x_edges, y_edges = np.histogram2d(x[:, 0], x[:, 1], bins=20, range=[[0, 1], [0, 1]])
-            else:
-                newbins, x_edges, y_edges = np.histogram2d(x[:, 0], x[:, 1], bins=20, range=[[0, 1], [0, 1]])
-                bins += newbins.T
-            x_centers = (x_edges[:-1] + x_edges[1:]) / 2
-            y_centers = (y_edges[:-1] + y_edges[1:]) / 2
-            x_centers, y_centers = np.meshgrid(x_centers, y_centers)
-            visObject.AddPointSet(x, title="Observed $x$ %s" % config.coupling_name, color='b')
-            visObject.AddContour(x_centers, y_centers, bins, "Cumulative %s" % config.coupling_name)
+        if config.save_plots and config.ndims >= 2:  # if 2D -> visualize distribution
+            visualize_x = function_visualizer.add_trained_function_plot(x=x, plot_name="Cumulative %s" % config.coupling_name)
+            visObject.AddPointSet(visualize_x, title="Observed $x$ %s" % config.coupling_name, color='b')
             visObject.AddPointSet(z, title="Latent space $z$", color='b')
-
 
         if config.use_tensorboard:
             tb_writer.add_scalar('Train/Loss', loss, epoch)
@@ -216,10 +211,9 @@ def run_experiment(config: ExperimentConfig):
 
         # Plot function output #
         if epoch % config.save_plt_interval == 0:
-            if config.ndims == 2:
+            if config.save_plots and config.ndims >= 2:
                 visObject.AddPointSet(z, title="Latent space $z$", color='b')
-                visObject.AddContour(grid_x1, grid_x2, func_out,
-                                     "Target function : " + function.name)
+                function_visualizer.add_target_function_plot()
             visObject.MakePlot(epoch)
 
 

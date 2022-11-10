@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 import numpy as np
@@ -7,11 +8,16 @@ from matplotlib.pyplot import cm
 import torch
 import shutil
 
+from sklearn.manifold import LocallyLinearEmbedding
+from sklearn.preprocessing import MinMaxScaler
+
+
 class visualize:
     def __init__(self,path):
         self.idx = 0
         self.data_dict = {}
         self.cont_dict = {}
+        self.plot_3d_dict = {}
         self.hist_dict = {}
         self.curv_dict = {}
         self.path = os.path.abspath(path)
@@ -19,7 +25,7 @@ class visualize:
             print ("Already exists directory %s, will recreate it"%self.path)
             shutil.rmtree(self.path)
         os.makedirs(self.path)
-        print ("Created directory %s"%self.path)
+        print("Created directory %s"%self.path)
 
 
     def AddPointSet(self,data,title,color):
@@ -30,6 +36,13 @@ class visualize:
         assert Y.shape[0] == Y.shape[1]
         assert Z.shape[0] == Z.shape[1]
         self.cont_dict[title] = [X,Y,Z]
+
+    def Add3dPlot(self, X, Y, Z, func, title):
+        assert X.shape[0] == X.shape[1]
+        assert Y.shape[0] == Y.shape[1]
+        assert Z.shape[0] == Z.shape[1]
+        assert func.shape[0] == func.shape[1]
+        self.plot_3d_dict[title] = [X,Y,Z,func]
 
     def AddCurves(self,x,x_err,dict_val,title):
         # x : float
@@ -65,10 +78,11 @@ class visualize:
     def MakePlot(self,epoch):
         N_data = len(self.data_dict.keys())
         N_cont = len(self.cont_dict.keys())
+        N_plot_3d = len(self.plot_3d_dict.keys())
         N_hist = len(self.hist_dict.keys())
         N_curv = len(self.curv_dict.keys())
-        Nh = max(N_data,N_cont,N_curv,N_hist)
-        Nv = int(N_data!=0)+int(N_cont!=0)+int(N_hist!=0)+int(N_curv!=0)
+        Nh = max(N_data,N_cont,N_plot_3d,N_curv,N_hist)
+        Nv = int(N_data!=0)+int(N_cont!=0)+int(N_plot_3d!=0)+int(N_hist!=0)+int(N_curv!=0)
         fig, axs = plt.subplots(Nv,Nh,figsize=(Nh*6,Nv*6))
         plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.9, wspace=0.2, hspace=0.2)
         fig.suptitle("Epoch %d"%epoch,fontsize=22)
@@ -77,6 +91,7 @@ class visualize:
             axs = axs.reshape(1,-1)
         idx_data = 0
         idx_cont = 0
+        idx_3d_plot = 0
         idx_hist = 0
         idx_curv = 0
         idx_vert = 0 
@@ -99,6 +114,16 @@ class visualize:
                 cs = axs[idx_vert,idx_cont].contourf(data[0],data[1],data[2],20)
                 #fig.colorbar(cs, ax=axs[idx_vert,idx_cont])
                 idx_cont += 1
+            idx_vert += 1
+
+        ##### 3d plots #####
+        if len(self.plot_3d_dict.keys()) != 0:
+            for title,data in self.plot_3d_dict.items():
+                axs[idx_vert, idx_3d_plot].remove()
+                ax = fig.add_subplot(Nv, Nh, idx_vert * Nv + idx_3d_plot, projection='3d')
+                ax.set_title(title,fontsize=20)
+                cs = ax.scatter(data[0],data[1],data[2], c=data[3], s=20)
+                idx_3d_plot += 1
             idx_vert += 1
 
         ##### Hist plots ####
@@ -141,6 +166,100 @@ class visualize:
         fig.savefig(path_fig)
         plt.close(fig)
         self.idx += 1
+
+
+class FunctionVisualizer:
+    def __init__(self, vis_object: visualize, function, input_dimension, max_plot_dimension):
+
+        self.vis_object = vis_object
+        self.function = function
+        self.input_dimension = input_dimension
+        self.n_components = min(max_plot_dimension, input_dimension)
+
+        assert self.n_components in [2, 3], "plot_dimension can be 2 or 3"
+        if self.n_components < self.input_dimension:
+            self.use_dimension_reduction = True
+            self._init_dimension_reduction()
+        else:
+            self.use_dimension_reduction = False
+
+        self.grids, self.func_out = self.compute_target_function_grid()
+        self.bins = None
+
+    def _init_dimension_reduction(self):
+        self.dimension_transform = LocallyLinearEmbedding(n_components=self.n_components)
+        self.scaler = MinMaxScaler()
+
+    def compute_target_function_grid(self):
+        """
+        generate gird for target function plot
+        """
+        if self.n_components == 2:
+            num_grid_samples = 100**self.n_components
+            target_shape = [100] * self.n_components
+        elif self.n_components == 3:
+            num_grid_samples = 10 ** self.n_components
+            target_shape = [10] * self.n_components
+        num_samples_per_dimension = math.ceil(num_grid_samples ** (1 / self.input_dimension))
+        grid = torch.meshgrid(*[torch.linspace(0, 1, num_samples_per_dimension) for dim in range(self.input_dimension)])
+        grid = torch.cat([dim_grid.reshape(-1, 1) for dim_grid in grid], axis=1)[:num_grid_samples]
+        func_out = self.function(grid).reshape(target_shape)
+
+        if self.use_dimension_reduction:
+            grid = self.dimension_transform.fit_transform(grid)
+            grid = self.scaler.fit_transform(grid)
+        grids = [grid[:num_grid_samples, dim].reshape(target_shape) for dim in range(self.n_components)]
+        return grids, func_out
+
+    def add_target_function_plot(self):
+        """
+        Add target function plot to visualize object
+        """
+        if self.n_components == 2:
+            self.vis_object.AddContour(*self.grids, self.func_out,
+                                       "Target function : " + self.function.name)
+        elif self.n_components == 3:
+            self.vis_object.Add3dPlot(*self.grids, self.func_out,
+                                      "Target function : " + self.function.name)
+
+    def add_trained_function_plot(self, x, plot_name) -> np.ndarray:
+        """
+        Add trained function plot to visualize object
+        return input x or transformed input x
+        """
+        if self.use_dimension_reduction:
+            visualize_x = self.dimension_transform.transform(x)
+            visualize_x = self.scaler.transform(visualize_x)
+        else:
+            visualize_x = x
+
+        if self.n_components == 2:
+            if self.bins is None:
+                bins, x_edges, y_edges = np.histogram2d(visualize_x[:, 0], visualize_x[:, 1], bins=20,
+                                                        range=[[0, 1], [0, 1]])
+            else:
+                newbins, x_edges, y_edges = np.histogram2d(visualize_x[:, 0], visualize_x[:, 1], bins=20,
+                                                           range=[[0, 1], [0, 1]])
+                self.bins += newbins.T
+            x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+            y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+            x_centers, y_centers = np.meshgrid(x_centers, y_centers)
+            self.vis_object.AddContour(x_centers, y_centers, bins, plot_name)
+            return visualize_x
+        elif self.n_components == 3:
+            if self.bins is None:
+                bins, (x_edges, y_edges, z_edges) = np.histogramdd(visualize_x, bins=10,
+                                                                   range=[[0, 1], [0, 1], [0, 1]])
+            else:
+                newbins, (x_edges, y_edges, z_edges) = np.histogramdd(visualize_x, bins=10,
+                                                                      range=[[0, 1],[0, 1],  [0, 1]])
+                self.bins += newbins.T
+            x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+            y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+            z_centers = (z_edges[:-1] + z_edges[1:]) / 2
+            x_centers, y_centers, z_centers = np.meshgrid(x_centers, y_centers, z_centers)
+            self.vis_object.Add3dPlot(x_centers, y_centers, z_centers, bins, plot_name)
+            return visualize_x
         
     
 #import numpy as np
