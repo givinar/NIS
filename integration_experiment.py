@@ -107,7 +107,6 @@ class TrainServer:
         self.data_ok = Request(b'DATA OK', 7)
 
         self.raw_data = bytearray()
-        self.data = bytearray()
         self.mode = Mode
 
         self.sock.bind((self.host, self.port))
@@ -144,9 +143,8 @@ class TrainServer:
     def process(self):
         try:
             mode = Mode.INFERENCE if chr(self.raw_data[0]) == 'i' else Mode.TRAIN
-            self.data = self.raw_data[1:]
             print('Debug: Mode =', mode)
-            print('Debug: Data =', np.frombuffer(self.data))
+            print('Debug: Data =', np.frombuffer(self.raw_data[1:]))
             if mode == Mode.TRAIN:
                 #make train
                 self.make_train()
