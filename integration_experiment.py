@@ -18,11 +18,13 @@ from network import MLP
 from transform import CompositeTransform
 from utils import pyhocon_wrapper
 from visualize import visualize
+from client import Client
 
 # Using by server
 import socket
 from enum import Enum
 from collections import namedtuple
+import threading
 
 Request = namedtuple('Request', 'name length')
 
@@ -96,7 +98,7 @@ class ExperimentConfig:
 class TrainServer:
     def __init__(self, _config: ExperimentConfig):
         self.config = _config
-        self.host = self.config.host
+        self.host = socket.gethostname()
         self.port = self.config.port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.NUM_CONNECTIONS = 5
@@ -107,11 +109,11 @@ class TrainServer:
         self.data_ok = Request(b'DATA OK', 7)
 
         self.raw_data = bytearray()
-        self.data = bytearray()
         self.mode = Mode
 
         self.sock.bind((self.host, self.port))
         self.sock.listen(self.NUM_CONNECTIONS)
+        self.nis = NeuralImportanceSampling(_config)
 
     def connect(self):
         print(f"Waiting for connection by {self.host}")
@@ -134,7 +136,7 @@ class TrainServer:
 
     # stub
     def make_infer(self):
-        arr = np.array([1.0, 1.2, 2.3], dtype=np.float32)
+        arr = self.nis.get_samples(10)  #Hardcoded number of samples. In the client too.
         return arr.tobytes()
 
     # stub
@@ -144,9 +146,8 @@ class TrainServer:
     def process(self):
         try:
             mode = Mode.INFERENCE if chr(self.raw_data[0]) == 'i' else Mode.TRAIN
-            self.data = self.raw_data[1:]
             print('Debug: Mode =', mode)
-            print('Debug: Data =', np.frombuffer(self.data))
+            print('Debug: Data =', np.frombuffer(self.raw_data[1:]))
             if mode == Mode.TRAIN:
                 #make train
                 self.make_train()
@@ -174,6 +175,8 @@ class TrainServer:
             print(f"Error: Connection failed ...\n")
 
     def run(self):
+        self.nis.initialize()
+        self.connect()
         try:
             print('Debug: Server started ...\n')
             while True:
@@ -185,6 +188,36 @@ class TrainServer:
 
         except ConnectionError:
             print(f"Error: Connection failed ...\n")
+
+        finally:
+            self.close()
+
+class NeuralImportanceSampling:
+    def __init__(self, _config: ExperimentConfig):
+        self.config = _config
+        self.logs_dir = os.path.join('logs', self.config.experiment_dir_name)
+
+    def initialize(self):
+        function: functions.Function = getattr(functions, self.config.funcname)(n=self.config.ndims)
+        masks = self.create_binary_mask(self.config.ndims)
+        flow = CompositeTransform([self.create_base_transform(mask=mask,
+                                                              coupling_name=self.config.coupling_name,
+                                                              hidden_dim=self.config.hidden_dim,
+                                                              n_hidden_layers=self.config.n_hidden_layers,
+                                                              blob=self.config.blob,
+                                                              piecewise_bins=self.config.piecewise_bins)
+                                   for mask in masks])
+        dist = torch.distributions.uniform.Uniform(torch.tensor([0.0] * self.config.ndims),
+                                                   torch.tensor([1.0] * self.config.ndims))
+        optimizer = torch.optim.Adam(flow.parameters(), lr=self.config.lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.config.epochs)
+
+        self.integrator = Integrator(func=function,
+                                flow=flow,
+                                dist=dist,
+                                optimizer=optimizer,
+                                scheduler=scheduler,
+                                loss_func=self.config.loss_func)
 
     def create_base_transform(self, mask, coupling_name, hidden_dim, n_hidden_layers, blob, piecewise_bins):
         transform_net_create_fn = lambda in_features, out_features: MLP(in_shape=[in_features],
@@ -226,10 +259,12 @@ class TrainServer:
 
         return masks
 
+    def get_samples(self, nsamples):
+        return self.integrator.sample(nsamples)
+
     def run_experiment(self):
 
-        logs_dir = os.path.join('logs', self.config.experiment_dir_name)
-        visObject = visualize(os.path.join(logs_dir, 'plots'))
+        visObject = visualize(os.path.join(self.logs_dir, 'plots'))
 
         if self.config.use_tensorboard:
             if self.config.wandb_project is not None:
@@ -239,27 +274,6 @@ class TrainServer:
                            entity="neural_importance_sampling")
             tb_writer = SummaryWriter(log_dir=logs_dir)
             tb_writer.add_text("Config", '\n'.join([f"{k.rjust(20, ' ')}: {v}" for k, v in asdict(self.config).items()]))
-
-        function: functions.Function = getattr(functions, self.config.funcname)(n=self.config.ndims)
-        masks = self.create_binary_mask(self.config.ndims)
-        flow = CompositeTransform([self.create_base_transform(mask=mask,
-                                                         coupling_name=self.config.coupling_name,
-                                                         hidden_dim=self.config.hidden_dim,
-                                                         n_hidden_layers=self.config.n_hidden_layers,
-                                                         blob=self.config.blob,
-                                                         piecewise_bins=self.config.piecewise_bins)
-                                   for mask in masks])
-        dist = torch.distributions.uniform.Uniform(torch.tensor([0.0]*self.config.ndims),
-                                                   torch.tensor([1.0]*self.config.ndims))
-        optimizer = torch.optim.Adam(flow.parameters(), lr=self.config.lr)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.config.epochs)
-
-        integrator = Integrator(func=function,
-                                flow=flow,
-                                dist=dist,
-                                optimizer=optimizer,
-                                scheduler=scheduler,
-                                loss_func=self.config.loss_func)
 
         if self.config.ndims == 2:  # if 2D -> prepare x1,x2 gird for visualize
             grid_x1, grid_x2 = torch.meshgrid(torch.linspace(0, 1, 100), torch.linspace(0, 1, 100))
@@ -337,16 +351,37 @@ def parse_args(arg=sys.argv[1:]):
         '-c', '--config', required=True,
         help='Configuration file path')
 
+    train_parser.add_argument(
+        '-cl', '--client', required=False,
+        help='Client mode')
+
+    train_parser.add_argument(
+        '-sr', '--server', required=False,
+        help='Server mode')
+
     return train_parser.parse_args(arg)
 
+def client_processing():
+    client = Client()
+    client.run_client()
+
+def server_processing(experiment_config):
+    server = TrainServer(experiment_config)
+    server.run()
 
 if __name__ == '__main__':
     options = parse_args()
     config = pyhocon_wrapper.parse_file(options.config)
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
-    server = TrainServer(experiment_config)
-    #server.connect()
-    #server.run()
-    #server.close()
 
-    server.run_experiment()
+    if options.server:
+        server_processing(experiment_config)
+    #server = threading.Thread(target=server_processing, args=(experiment_config,))
+    #server.start()
+
+    if options.client:
+        client_processing()
+    #client = threading.Thread(target=client_processing, daemon=True)
+    #client.start()
+
+    #server.run_experiment()
