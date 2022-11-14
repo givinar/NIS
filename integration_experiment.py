@@ -162,9 +162,8 @@ class TrainServer:
                 [samples, pdfs] = self.make_infer()
                 raw_data = bytearray()
                 s = samples.cpu().detach().numpy()
-                p = pdfs.cpu().detach().numpy()
-                temp_arr = np.concatenate(list(zip(s, p)))
-                raw_data.extend(temp_arr.tobytes())
+                p = pdfs.cpu().detach().numpy().reshape([self.num_points,1])
+                raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
 
                 self.connection.send(self.put.name)
                 answer = self.connection.recv(self.put_ok.length)
@@ -382,6 +381,14 @@ if __name__ == '__main__':
     options = parse_args()
     config = pyhocon_wrapper.parse_file(options.config)
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
+
+    s = np.empty([3, 2])
+    s[0] = [1, 1]
+    s[1] = [2, 2]
+    s[2] = [3, 3]
+    p = np.ones(3)
+    p2 = p.reshape([3,1])
+    ar = np.concatenate((s, p2), axis=1)
 
     if options.server:
         server_processing(experiment_config)
