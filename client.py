@@ -4,6 +4,7 @@ from collections import namedtuple
 
 Request = namedtuple('Request', 'name length')
 
+
 class Client:
     def __init__(self):
         self.host = socket.gethostname()
@@ -59,9 +60,12 @@ class Client:
             if answer == self.put_ok.name:
                 self.__inference()
 
-
-
     def run_client(self):
         self.__connect()
         self.__processing()
         self.__disconnect()
+
+
+if __name__ == '__main__':
+    client = Client()
+    client.run_client()

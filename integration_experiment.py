@@ -18,7 +18,6 @@ from network import MLP
 from transform import CompositeTransform
 from utils import pyhocon_wrapper
 from visualize import visualize
-from client import Client
 
 # Using by server
 import socket
@@ -360,44 +359,25 @@ def parse_args(arg=sys.argv[1:]):
         help='Configuration file path')
 
     train_parser.add_argument(
-        '-cl', '--client', required=False,
-        help='Client mode')
-
-    train_parser.add_argument(
         '-sr', '--server', required=False,
         help='Server mode')
 
     return train_parser.parse_args(arg)
 
-def client_processing():
-    client = Client()
-    client.run_client()
 
 def server_processing(experiment_config):
     server = TrainServer(experiment_config)
     server.run()
+
 
 if __name__ == '__main__':
     options = parse_args()
     config = pyhocon_wrapper.parse_file(options.config)
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
 
-    s = np.empty([3, 2])
-    s[0] = [1, 1]
-    s[1] = [2, 2]
-    s[2] = [3, 3]
-    p = np.ones(3)
-    p2 = p.reshape([3,1])
-    ar = np.concatenate((s, p2), axis=1)
-
     if options.server:
         server_processing(experiment_config)
     #server = threading.Thread(target=server_processing, args=(experiment_config,))
     #server.start()
-
-    if options.client:
-        client_processing()
-    #client = threading.Thread(target=client_processing, daemon=True)
-    #client.start()
 
     #server.run_experiment()
