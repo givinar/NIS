@@ -1,6 +1,7 @@
 import sys
-import numpy as no
+import numpy as np
 import torch
+from torch.utils.data import TensorDataset, DataLoader
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -162,6 +163,76 @@ class Integrator():
             return (y/absdet).to('cpu'), x.to('cpu')
 
         return (y/absdet).to('cpu')
-        
-        
-        
+
+    def sample_with_context(self, context: np.ndarray, jacobian: bool = False):
+        """
+        Sample from the trained distribution with context for transform network.
+
+        Args:
+            - context (np.ndarray): context for transform network
+            - jacobian (bool): return set of points with associated jacobian in a tuple
+
+        Returns:
+            tf.tensor of size (context.shape[0], ndim) of sampled points, and jacobian(optional).
+
+        """
+        z = self.dist.sample((context.shape[0],)).to(self.device)
+        with torch.no_grad():
+            x, absdet = self.flow(z, context=torch.tensor(context).to(self.device))
+        if jacobian:
+            return (x.to('cpu'), absdet.to('cpu'))
+        else:
+            return x.to('cpu')
+
+    def train_with_context(self, context: np.ndarray, batch_size=100, lr=None, points=False, integral=False) -> list:
+        # Initialize #
+        self.flow.train()
+
+
+        # Sample #
+        z = self.dist.sample((context.shape[0])).to(self.device)
+        # log_prob = self.dist.log_prob(z)
+        # In practice for uniform dist, log_prob = 0 and absdet is multiplied by 1
+        # But in the future we might change sampling dist so good to have
+
+        # Process #
+        context_x = context[:, :-1]
+        context_y = context[:, -1]
+        train_result = []
+        for batch_x, batch_y in DataLoader(dataset=TensorDataset(torch.Tensor(context_x),
+                                                                 torch.Tensor(context_y)),
+                                           batch_size=batch_size):
+
+            self.optimizer.zero_grad()
+            x, absdet = self.flow(z, batch_x)
+            # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
+
+            # --------------- START TODO compute loss ---------------
+            y = batch_y
+            mean = torch.mean(y / absdet)
+            var = torch.var(y / absdet)
+            y = (y / mean).detach()
+
+            # Backprop #
+            loss = self.loss_func(y, absdet)
+            loss.backward()
+            # --------------- END TODO compute loss ---------------
+
+            self.optimizer.step()
+            if self.scheduler is not None:
+                self.scheduler.step(self.global_step)
+            self.global_step += 1
+
+            # Integral #
+            return_dict = {'loss': loss.to('cpu').item()}
+            if lr:
+                return_dict['lr'] = self.optimizer.param_groups[0]['lr']
+            if integral:
+                return_dict['mean'] = mean.to('cpu').item()
+                return_dict['uncertainty'] = torch.sqrt(var / (context.shape[0] - 1.)).to('cpu').item()
+            if points:
+                return_dict['z'] = z.to('cpu')
+                return_dict['x'] = x.to('cpu')
+            train_result.append(return_dict)
+        return train_result
+

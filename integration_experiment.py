@@ -41,6 +41,7 @@ class ExperimentConfig:
     ndims: Integration dimension
     funcname: Name of the function in functions.py to use for integration
     coupling_name: name of the Coupling Layers using in NIS [piecewiseLinear, piecewiseQuadratic, piecewiseCubic]
+    num_context_features: : number of context features in transform net
     hidden_dim: Number of neurons per layer in the coupling layers
     n_hidden_layers: Number of hidden layers in coupling layers
     blob: Number of bins for blob-encoding (default = None)
@@ -58,6 +59,7 @@ class ExperimentConfig:
     ndims: int = 3
     funcname: str = "Gaussian"
     coupling_name: str = "piecewiseQuadratic"
+    num_context_features: int = 0
     hidden_dim: int = 10
     n_hidden_layers: int = 3
     blob: Union[int, None] = None
@@ -88,6 +90,7 @@ class ExperimentConfig:
                                 experiment_dir_name=pyhocon_config.get_string('logging.plot_dir_name', cls.experiment_dir_name),
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
+                                num_context_features=pyhocon_config.get_int('train.num_context_features'),
                                 wandb_project=pyhocon_config.get_string('logging.tensorboard.wandb_project', None),
                                 use_tensorboard=pyhocon_config.get_bool('logging.tensorboard.use_tensorboard', False),
                                 host=pyhocon_config.get_string('server.host', '127.0.0.1'),
@@ -134,14 +137,15 @@ class TrainServer:
         except ConnectionError:
             print(f"Error: Connection failed ...\n")
 
-    # stub
     def make_infer(self):
-        arr = self.nis.get_samples(10)  #Hardcoded number of samples. In the client too.
+        context = np.frombuffer(self.raw_data[1:].copy(), dtype=np.float32).reshape((-1, self.config.num_context_features))
+        arr = self.nis.get_samples(context=context)
         return arr.tobytes()
 
-    # stub
     def make_train(self):
-        print('Debug: Train data was processed\n')
+        context = np.frombuffer(self.raw_data[1:].copy(), dtype=np.float32).reshape((-1, self.config.num_context_features + 1))
+        train_result = self.nis.train(context=context)
+        print(train_result)
 
     def process(self):
         try:
@@ -205,7 +209,8 @@ class NeuralImportanceSampling:
                                                               hidden_dim=self.config.hidden_dim,
                                                               n_hidden_layers=self.config.n_hidden_layers,
                                                               blob=self.config.blob,
-                                                              piecewise_bins=self.config.piecewise_bins)
+                                                              piecewise_bins=self.config.piecewise_bins,
+                                                              num_context_features=self.config.num_context_features)
                                    for mask in masks])
         dist = torch.distributions.uniform.Uniform(torch.tensor([0.0] * self.config.ndims),
                                                    torch.tensor([1.0] * self.config.ndims))
@@ -219,22 +224,28 @@ class NeuralImportanceSampling:
                                 scheduler=scheduler,
                                 loss_func=self.config.loss_func)
 
-    def create_base_transform(self, mask, coupling_name, hidden_dim, n_hidden_layers, blob, piecewise_bins):
+    def create_base_transform(self, mask, coupling_name, hidden_dim, n_hidden_layers, blob, piecewise_bins,
+                              num_context_features=0):
         transform_net_create_fn = lambda in_features, out_features: MLP(in_shape=[in_features],
                                                                         out_shape=[out_features],
                                                                         hidden_sizes=[hidden_dim] * n_hidden_layers,
                                                                         hidden_activation=nn.ReLU(),
                                                                         output_activation=None)
         if coupling_name == 'additive':
-            return AdditiveCouplingTransform(mask, transform_net_create_fn, blob)
+            return AdditiveCouplingTransform(mask, transform_net_create_fn, blob,
+                                             num_context_features=num_context_features)
         elif coupling_name == 'affine':
-            return AffineCouplingTransform(mask, transform_net_create_fn, blob)
+            return AffineCouplingTransform(mask, transform_net_create_fn, blob,
+                                           num_context_features=num_context_features)
         elif coupling_name == 'piecewiseLinear':
-            return PiecewiseLinearCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins)
+            return PiecewiseLinearCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins,
+                                                    num_context_features=num_context_features)
         elif coupling_name == 'piecewiseQuadratic':
-            return PiecewiseQuadraticCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins)
+            return PiecewiseQuadraticCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins,
+                                                       num_context_features=num_context_features)
         elif coupling_name == 'piecewiseCubic':
-            return PiecewiseCubicCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins)
+            return PiecewiseCubicCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins,
+                                                   num_context_features=num_context_features)
         else:
             raise RuntimeError("Could not find coupling with name %s" % coupling_name)
 
@@ -259,8 +270,11 @@ class NeuralImportanceSampling:
 
         return masks
 
-    def get_samples(self, nsamples):
-        return self.integrator.sample(nsamples)
+    def get_samples(self, context):
+        return self.integrator.sample_with_context(context)
+
+    def train(self, context):
+        return self.integrator.train_with_context(context=context, batch_size=self.config.batch_size)
 
     def run_experiment(self):
 
