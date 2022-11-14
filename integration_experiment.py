@@ -114,6 +114,7 @@ class TrainServer:
         self.sock.bind((self.host, self.port))
         self.sock.listen(self.NUM_CONNECTIONS)
         self.nis = NeuralImportanceSampling(_config)
+        self.num_points = 10
 
     def connect(self):
         print(f"Waiting for connection by {self.host}")
@@ -136,8 +137,11 @@ class TrainServer:
 
     # stub
     def make_infer(self):
-        arr = self.nis.get_samples(10)  #Hardcoded number of samples. In the client too.
-        return arr.tobytes()
+        points = np.frombuffer(self.raw_data[1:], dtype=float)
+        points = points.reshape((self.num_points, 3))
+        num = points.shape[0]
+        [samples, pdfs] = self.nis.get_samples(num)  #Hardcoded number of samples. In the client too.
+        return [samples, pdfs]
 
     # stub
     def make_train(self):
@@ -155,12 +159,17 @@ class TrainServer:
                 self.connection.send(self.data_ok.name)
             elif mode == Mode.INFERENCE:
                 #make infer
-                infer_data = self.make_infer()
+                [samples, pdfs] = self.make_infer()
+                raw_data = bytearray()
+                s = samples.cpu().detach().numpy()
+                p = pdfs.cpu().detach().numpy()
+                temp_arr = np.concatenate(list(zip(s, p)))
+                raw_data.extend(temp_arr.tobytes())
 
                 self.connection.send(self.put.name)
                 answer = self.connection.recv(self.put_ok.length)
                 if answer == self.put_ok.name:
-                    self.connection.sendall(infer_data)
+                    self.connection.sendall(raw_data)
                     answer = self.connection.recv(self.data_ok.length)
                     if answer == self.data_ok.name:
                         print('Info: Inference data was sent successfully ...\n')

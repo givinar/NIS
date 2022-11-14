@@ -88,7 +88,7 @@ class Integrator():
             return_dict['x'] = x.to('cpu')
         return return_dict
 
-    def sample(self, nsamples, latent=False,jacobian=False):
+    def sample(self, nsamples, latent=False,jacobian=True):
         """ 
         Sample from the trained distribution.
         Args:

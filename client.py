@@ -18,11 +18,11 @@ class Client:
         print("Client: disconnected from the server")
 
     def __inference(self):
-        points = np.random.random((3, self.num_points))
-        message = bytearray()
-        message.extend("i".encode())
-        message.extend(points.tobytes())
-        self.client_socket.send(message)
+        points = np.random.random((self.num_points, 3))
+        raw_data = bytearray()
+        raw_data.extend("i".encode())
+        raw_data.extend(points.tobytes())
+        self.client_socket.send(raw_data)
 
     def __processing(self):
         while True:
@@ -36,7 +36,6 @@ class Client:
 
 
     def run_client(self):
-
         self.__connect()
         self.__processing()
         self.__disconnect()
