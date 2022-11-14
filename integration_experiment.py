@@ -84,7 +84,8 @@ class ExperimentConfig:
                                 piecewise_bins=pyhocon_config.get_int('train.num_piecewise_bins', 10),
                                 loss_func=pyhocon_config.get_string('train.loss', 'MSE'),
                                 save_plt_interval=pyhocon_config.get_int('logging.save_plt_interval', 5),
-                                experiment_dir_name=pyhocon_config.get_string('logging.plot_dir_name', cls.experiment_dir_name),
+                                experiment_dir_name=pyhocon_config.get_string('logging.plot_dir_name',
+                                                                              cls.experiment_dir_name),
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
                                 wandb_project=pyhocon_config.get_string('logging.tensorboard.wandb_project', None),
@@ -161,7 +162,7 @@ class TrainServer:
                 [samples, pdfs] = self.make_infer()
                 raw_data = bytearray()
                 s = samples.cpu().detach().numpy()
-                p = pdfs.cpu().detach().numpy().reshape([self.num_points,1])
+                p = pdfs.cpu().detach().numpy().reshape([self.num_points, 1])
                 raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
 
                 self.connection.send(self.put.name)
@@ -199,10 +200,12 @@ class TrainServer:
         finally:
             self.close()
 
+
 class NeuralImportanceSampling:
     def __init__(self, _config: ExperimentConfig):
         self.config = _config
         self.logs_dir = os.path.join('logs', self.config.experiment_dir_name)
+        self.integrator = None
 
     def initialize(self):
         function: functions.Function = getattr(functions, self.config.funcname)(n=self.config.ndims)
@@ -285,7 +288,7 @@ class NeuralImportanceSampling:
         if self.config.ndims == 2:  # if 2D -> prepare x1,x2 gird for visualize
             grid_x1, grid_x2 = torch.meshgrid(torch.linspace(0, 1, 100), torch.linspace(0, 1, 100))
             grid = torch.cat([grid_x1.reshape(-1, 1), grid_x2.reshape(-1, 1)], axis=1)
-            func_out = function(grid).reshape(100, 100)
+            func_out = self.function(grid).reshape(100, 100)
 
         bins = None
         means = []
@@ -294,7 +297,7 @@ class NeuralImportanceSampling:
             print("Epoch %d/%d [%0.2f%%]" % (epoch, self.config.epochs, epoch / self.config.epochs * 100))
 
             # Integrate on one epoch and produce resuts #
-            result_dict = integrator.train_one_step(self.config.batch_size, lr=True, integral=True, points=True)
+            result_dict = self.integrator.train_one_step(self.config.batch_size, lr=True, integral=True, points=True)
             loss = result_dict['loss']
             lr = result_dict['lr']
             mean = result_dict['mean']
@@ -346,7 +349,7 @@ class NeuralImportanceSampling:
                 if self.config.ndims == 2:
                     visObject.AddPointSet(z, title="Latent space $z$", color='b')
                     visObject.AddContour(grid_x1, grid_x2, func_out,
-                                         "Target function : " + function.name)
+                                         "Target function : " + self.function.name)
                 visObject.MakePlot(epoch)
 
 
@@ -380,4 +383,6 @@ if __name__ == '__main__':
     #server = threading.Thread(target=server_processing, args=(experiment_config,))
     #server.start()
 
-    #server.run_experiment()
+    nis = NeuralImportanceSampling(experiment_config)
+    nis.initialize()
+    nis.run_experiment()
