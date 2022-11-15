@@ -137,8 +137,7 @@ class TrainServer:
 
     # stub
     def make_infer(self):
-        points = np.frombuffer(self.raw_data[1:], dtype=float)
-        points = points.reshape((self.num_points, 3))
+        points = np.frombuffer(self.raw_data[1:], dtype=np.float32).reshape((self.num_points, 3))
         num = points.shape[0]
         [samples, pdfs] = self.nis.get_samples(num)  #Hardcoded number of samples. In the client too.
         return [samples, pdfs]
@@ -146,12 +145,15 @@ class TrainServer:
     # stub
     def make_train(self):
         print('Debug: Train data was processed\n')
+        context = np.frombuffer(self.raw_data[1:].copy(), dtype=np.float32).reshape((self.num_points, 7))
+        train_result = self.nis.train(context=context, nsamples=self.num_points)
+        print(train_result)
 
     def process(self):
         try:
             mode = Mode.INFERENCE if chr(self.raw_data[0]) == 'i' else Mode.TRAIN
             print('Debug: Mode =', mode)
-            print('Debug: Data =', np.frombuffer(self.raw_data[1:]))
+            print('Debug: Data =', np.frombuffer(self.raw_data[1:], dtype=np.float32))
             if mode == Mode.TRAIN:
                 #make train
                 self.make_train()
@@ -272,6 +274,9 @@ class NeuralImportanceSampling:
     def get_samples(self, nsamples):
         return self.integrator.sample(nsamples)
 
+    def train(self, context, nsamples):
+        self.integrator.train_one_step(context=context, nsamples=nsamples, lr=False, integral=False, points=False)
+
     def run_experiment(self):
 
         visObject = visualize(os.path.join(self.logs_dir, 'plots'))
@@ -383,6 +388,6 @@ if __name__ == '__main__':
     #server = threading.Thread(target=server_processing, args=(experiment_config,))
     #server.start()
 
-    nis = NeuralImportanceSampling(experiment_config)
-    nis.initialize()
-    nis.run_experiment()
+    #nis = NeuralImportanceSampling(experiment_config)
+    #nis.initialize()
+    #nis.run_experiment()
