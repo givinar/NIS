@@ -58,7 +58,7 @@ class Client:
         self.client_socket.send(self.data_ok.name)
 
         np_data = np.frombuffer(self.raw_data, dtype=np.float32)        # s1, s2, pdf
-        samples = np_data.reshape((self.num_points, 3))
+        samples = np_data.reshape((self.num_points, -1))
         self.points_data = np.concatenate((points, samples), axis=1)
         print(self.points_data)
 

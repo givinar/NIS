@@ -16,7 +16,7 @@ class CouplingTransform(transform.Transform):
         https://gitlab.com/i-flow/i-flow/, arXiv:2001.05486 (Tensorflow)
     """
 
-    def __init__(self,mask,transform_net_create_fn,blob=None):
+    def __init__(self, mask, transform_net_create_fn, blob=None, num_context_features=0):
         """
         Constructor.
         Args:
@@ -26,6 +26,7 @@ class CouplingTransform(transform.Transform):
             transform_net_create_fn : lambda defining a network based on in_features and out_features
                 TODO : might want to include options in the transform definition
             blob : int for number of bins to include in the input one-blob encoding
+            num_context_features: number of context features in transform net
         """
         mask = torch.as_tensor(mask)
         if mask.dim() != 1:
@@ -35,6 +36,7 @@ class CouplingTransform(transform.Transform):
 
         super().__init__()
         self.features = len(mask)
+        self.num_context_features = num_context_features
         features_vector = torch.arange(self.features)
 
         self.register_buffer('identity_features', features_vector.masked_select(mask <= 0))
@@ -50,12 +52,12 @@ class CouplingTransform(transform.Transform):
 
         if self.blob:
             self.transform_net = transform_net_create_fn(
-                self.num_identity_features * self.nbins_in,
+                self.num_identity_features * self.nbins_in + num_context_features,
                 self.num_transform_features * self._transform_dim_multiplier()
             )
         else:
             self.transform_net = transform_net_create_fn(
-                self.num_identity_features,
+                self.num_identity_features + num_context_features,
                 self.num_transform_features * self._transform_dim_multiplier()
             )
 
@@ -211,10 +213,11 @@ class PiecewiseLinearCouplingTransform(PiecewiseCouplingTransform):
                  mask,
                  transform_net_create_fn,
                  blob = None,
-                 num_bins=10):
+                 num_bins=10,
+                 num_context_features=0):
         self.num_bins = num_bins
 
-        super().__init__(mask, transform_net_create_fn,blob)
+        super().__init__(mask, transform_net_create_fn,blob, num_context_features=num_context_features)
 
     def _transform_dim_multiplier(self):
         return self.num_bins
@@ -239,12 +242,13 @@ class PiecewiseQuadraticCouplingTransform(PiecewiseCouplingTransform):
                  blob = None,
                  num_bins=10,
                  min_bin_width=splines.DEFAULT_MIN_BIN_WIDTH,
-                 min_bin_height=splines.DEFAULT_MIN_BIN_HEIGHT):
+                 min_bin_height=splines.DEFAULT_MIN_BIN_HEIGHT,
+                 num_context_features=0):
         self.num_bins = num_bins
         self.min_bin_width = min_bin_width
         self.min_bin_height = min_bin_height
 
-        super().__init__(mask, transform_net_create_fn, blob)
+        super().__init__(mask, transform_net_create_fn, blob, num_context_features=num_context_features)
 
     def _transform_dim_multiplier(self):
         return self.num_bins * 2 + 1
@@ -276,13 +280,14 @@ class PiecewiseCubicCouplingTransform(PiecewiseCouplingTransform):
                  blob = None,
                  num_bins=10,
                  min_bin_width=splines.DEFAULT_MIN_BIN_WIDTH,
-                 min_bin_height=splines.DEFAULT_MIN_BIN_HEIGHT):
+                 min_bin_height=splines.DEFAULT_MIN_BIN_HEIGHT,
+                 num_context_features=0):
 
         self.num_bins = num_bins
         self.min_bin_width = min_bin_width
         self.min_bin_height = min_bin_height
 
-        super().__init__(mask, transform_net_create_fn, blob)
+        super().__init__(mask, transform_net_create_fn, blob, num_context_features=num_context_features)
 
     def _transform_dim_multiplier(self):
         return self.num_bins * 2 + 2

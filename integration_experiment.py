@@ -40,6 +40,7 @@ class ExperimentConfig:
     ndims: Integration dimension
     funcname: Name of the function in functions.py to use for integration
     coupling_name: name of the Coupling Layers using in NIS [piecewiseLinear, piecewiseQuadratic, piecewiseCubic]
+    num_context_features: : number of context features in transform net
     hidden_dim: Number of neurons per layer in the coupling layers
     n_hidden_layers: Number of hidden layers in coupling layers
     blob: Number of bins for blob-encoding (default = None)
@@ -57,6 +58,7 @@ class ExperimentConfig:
     ndims: int = 3
     funcname: str = "Gaussian"
     coupling_name: str = "piecewiseQuadratic"
+    num_context_features: int = 0
     hidden_dim: int = 10
     n_hidden_layers: int = 3
     blob: Union[int, None] = None
@@ -88,6 +90,7 @@ class ExperimentConfig:
                                                                               cls.experiment_dir_name),
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
+                                num_context_features=pyhocon_config.get_int('train.num_context_features'),
                                 wandb_project=pyhocon_config.get_string('logging.tensorboard.wandb_project', None),
                                 use_tensorboard=pyhocon_config.get_bool('logging.tensorboard.use_tensorboard', False),
                                 host=pyhocon_config.get_string('server.host', '127.0.0.1'),
@@ -114,7 +117,6 @@ class TrainServer:
         self.sock.bind((self.host, self.port))
         self.sock.listen(self.NUM_CONNECTIONS)
         self.nis = NeuralImportanceSampling(_config)
-        self.num_points = 10
 
     def connect(self):
         print(f"Waiting for connection by {self.host}")
@@ -137,16 +139,15 @@ class TrainServer:
 
     # stub
     def make_infer(self):
-        points = np.frombuffer(self.raw_data[1:], dtype=np.float32).reshape((self.num_points, 3))
-        num = points.shape[0]
-        [samples, pdfs] = self.nis.get_samples(num)  #Hardcoded number of samples. In the client too.
+        points = np.frombuffer(self.raw_data[1:], dtype=np.float32).reshape((-1, self.config.num_context_features))
+        [samples, pdfs] = self.nis.get_samples(points)
         return [samples, pdfs]
 
     # stub
     def make_train(self):
         print('Debug: Train data was processed\n')
-        context = np.frombuffer(self.raw_data[1:].copy(), dtype=np.float32).reshape((self.num_points, 7))
-        train_result = self.nis.train(context=context, nsamples=self.num_points)
+        context = np.frombuffer(self.raw_data[1:].copy(), dtype=np.float32).reshape((-1, self.config.num_context_features + 1))
+        train_result = self.nis.train(context=context)
         print(train_result)
 
     def process(self):
@@ -164,7 +165,7 @@ class TrainServer:
                 [samples, pdfs] = self.make_infer()
                 raw_data = bytearray()
                 s = samples.cpu().detach().numpy()
-                p = pdfs.cpu().detach().numpy().reshape([self.num_points, 1])
+                p = pdfs.cpu().detach().numpy().reshape([-1, 1])
                 raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
 
                 self.connection.send(self.put.name)
@@ -217,7 +218,8 @@ class NeuralImportanceSampling:
                                                               hidden_dim=self.config.hidden_dim,
                                                               n_hidden_layers=self.config.n_hidden_layers,
                                                               blob=self.config.blob,
-                                                              piecewise_bins=self.config.piecewise_bins)
+                                                              piecewise_bins=self.config.piecewise_bins,
+                                                              num_context_features=self.config.num_context_features)
                                    for mask in masks])
         dist = torch.distributions.uniform.Uniform(torch.tensor([0.0] * self.config.ndims),
                                                    torch.tensor([1.0] * self.config.ndims))
@@ -231,22 +233,28 @@ class NeuralImportanceSampling:
                                 scheduler=scheduler,
                                 loss_func=self.config.loss_func)
 
-    def create_base_transform(self, mask, coupling_name, hidden_dim, n_hidden_layers, blob, piecewise_bins):
+    def create_base_transform(self, mask, coupling_name, hidden_dim, n_hidden_layers, blob, piecewise_bins,
+                              num_context_features=0):
         transform_net_create_fn = lambda in_features, out_features: MLP(in_shape=[in_features],
                                                                         out_shape=[out_features],
                                                                         hidden_sizes=[hidden_dim] * n_hidden_layers,
                                                                         hidden_activation=nn.ReLU(),
                                                                         output_activation=None)
         if coupling_name == 'additive':
-            return AdditiveCouplingTransform(mask, transform_net_create_fn, blob)
+            return AdditiveCouplingTransform(mask, transform_net_create_fn, blob,
+                                             num_context_features=num_context_features)
         elif coupling_name == 'affine':
-            return AffineCouplingTransform(mask, transform_net_create_fn, blob)
+            return AffineCouplingTransform(mask, transform_net_create_fn, blob,
+                                           num_context_features=num_context_features)
         elif coupling_name == 'piecewiseLinear':
-            return PiecewiseLinearCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins)
+            return PiecewiseLinearCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins,
+                                                    num_context_features=num_context_features)
         elif coupling_name == 'piecewiseQuadratic':
-            return PiecewiseQuadraticCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins)
+            return PiecewiseQuadraticCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins,
+                                                       num_context_features=num_context_features)
         elif coupling_name == 'piecewiseCubic':
-            return PiecewiseCubicCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins)
+            return PiecewiseCubicCouplingTransform(mask, transform_net_create_fn, blob, piecewise_bins,
+                                                   num_context_features=num_context_features)
         else:
             raise RuntimeError("Could not find coupling with name %s" % coupling_name)
 
@@ -271,11 +279,11 @@ class NeuralImportanceSampling:
 
         return masks
 
-    def get_samples(self, nsamples):
-        return self.integrator.sample(nsamples)
+    def get_samples(self, context):
+        return self.integrator.sample_with_context(context, jacobian=True)
 
-    def train(self, context, nsamples):
-        self.integrator.train_one_step(context=context, nsamples=nsamples, lr=False, integral=False, points=False)
+    def train(self, context):
+        return self.integrator.train_with_context(context=context, lr=False, integral=False, points=False)
 
     def run_experiment(self):
 
