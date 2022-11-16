@@ -60,18 +60,17 @@ class Client:
         np_data = np.frombuffer(self.raw_data, dtype=np.float32)        # s1, s2, pdf
         samples = np_data.reshape((self.num_points, -1))
         self.points_data = np.concatenate((points, samples), axis=1)
-        print(self.points_data)
 
     def __send_radiance(self):
         print("----> Train")
         t_data = torch.tensor(self.points_data[:, [3, 4]])
         t_y = self.function(t_data)
         y = t_y.cpu().detach().numpy()
-        print(y)
         self.points_data = np.concatenate((self.points_data, y.reshape([self.num_points, 1])), axis=1)
+
         raw_data = bytearray()
         raw_data.extend("t".encode())
-        raw_data.extend(self.points_data.tobytes())
+        raw_data.extend(self.points_data[:, [0, 1, 2, 6]].tobytes())    #send x, y, z, rad
         self.client_socket.send(raw_data)
 
         answer = self.client_socket.recv(1024)

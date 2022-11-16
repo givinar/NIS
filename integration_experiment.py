@@ -145,10 +145,8 @@ class TrainServer:
 
     # stub
     def make_train(self):
-        print('Debug: Train data was processed\n')
-        context = np.frombuffer(self.raw_data[1:].copy(), dtype=np.float32).reshape((-1, self.config.num_context_features + 1))
+        context = np.frombuffer(self.raw_data[1:], dtype=np.float32).reshape((-1, self.config.num_context_features + 1))
         train_result = self.nis.train(context=context)
-        print(train_result)
 
     def process(self):
         try:
@@ -156,12 +154,10 @@ class TrainServer:
             print('Debug: Mode =', mode)
             print('Debug: Data =', np.frombuffer(self.raw_data[1:], dtype=np.float32))
             if mode == Mode.TRAIN:
-                #make train
                 self.make_train()
 
                 self.connection.send(self.data_ok.name)
             elif mode == Mode.INFERENCE:
-                #make infer
                 [samples, pdfs] = self.make_infer()
                 raw_data = bytearray()
                 s = samples.cpu().detach().numpy()
@@ -211,7 +207,7 @@ class NeuralImportanceSampling:
         self.integrator = None
 
     def initialize(self):
-        function: functions.Function = getattr(functions, self.config.funcname)(n=self.config.ndims)
+        self.function: functions.Function = getattr(functions, self.config.funcname)(n=self.config.ndims)
         masks = self.create_binary_mask(self.config.ndims)
         flow = CompositeTransform([self.create_base_transform(mask=mask,
                                                               coupling_name=self.config.coupling_name,
@@ -226,7 +222,7 @@ class NeuralImportanceSampling:
         optimizer = torch.optim.Adam(flow.parameters(), lr=self.config.lr)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.config.epochs)
 
-        self.integrator = Integrator(func=function,
+        self.integrator = Integrator(func=self.function,
                                 flow=flow,
                                 dist=dist,
                                 optimizer=optimizer,

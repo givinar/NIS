@@ -37,7 +37,7 @@ class Integrator():
             raise RuntimeError("Requested loss function not found in class methods")
         self.loss_func = getattr(self.divergence, loss_func)
 
-    def train_one_step(self, context, nsamples, lr=None,points=False,integral=False):
+    def train_one_step(self, nsamples, lr=None, points=False,integral=False):
         """ Perform one step of integration and improve the sampling.         
         Args:             
             - nsamples(int): Number of samples to be taken in a training step
@@ -64,8 +64,7 @@ class Integrator():
         # Process #
         x, absdet = self.flow(z)
         #absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
-        #y = self._func(x)
-        y = torch.tensor(context[:,6])
+        y = self._func(x)
         mean = torch.mean(y/absdet)
         var = torch.var(y/absdet)
         y = (y/mean).detach()
@@ -218,6 +217,8 @@ class Integrator():
             # Backprop #
             loss = self.loss_func(y, absdet)
             loss.backward()
+
+            print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------
 
             self.optimizer.step()
