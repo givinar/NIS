@@ -36,6 +36,7 @@ class Integrator():
         if loss_func not in self.divergence.avail:
             raise RuntimeError("Requested loss function not found in class methods")
         self.loss_func = getattr(self.divergence, loss_func)
+        self.z_mapper = {}
 
     def train_one_step(self, nsamples, lr=None, points=False,integral=False):
         """ Perform one step of integration and improve the sampling.         
@@ -177,6 +178,7 @@ class Integrator():
 
         """
         z = self.dist.sample((context.shape[0],)).to(self.device)
+        list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context)))
         with torch.no_grad():
             x, absdet = self.flow(z, context=torch.tensor(context).to(self.device))
         if jacobian:
@@ -190,7 +192,8 @@ class Integrator():
 
 
         # Sample #
-        z = self.dist.sample((context.shape[0],)).to(self.device)
+        # z = self.dist.sample((context.shape[0],)).to(self.device)
+        z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, :-1]])
         # log_prob = self.dist.log_prob(z)
         # In practice for uniform dist, log_prob = 0 and absdet is multiplied by 1
         # But in the future we might change sampling dist so good to have
