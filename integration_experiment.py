@@ -23,12 +23,13 @@ from visualize import visualize
 import socket
 from enum import Enum
 from collections import namedtuple
-import threading
+import logging
 
 Request = namedtuple('Request', 'name length')
 
 
 class Mode(Enum):
+    UNKNOWN = -1
     TRAIN = 0
     INFERENCE = 1
 
@@ -107,11 +108,15 @@ class TrainServer:
         self.NUM_CONNECTIONS = 5
         self.BUFSIZE = 8192
         self.connection = None
-        self.put = Request(b'PUT', 3)
-        self.put_ok = Request(b'PUT OK', 6)
+        self.put_infer = Request(b'PUT INFER', 9)
+        self.put_train = Request(b'PUT TRAIN', 9)
+        self.put_infer_ok = Request(b'PUT INFER OK', 12)
+        self.put_train_ok = Request(b'PUT TRAIN OK', 12)
         self.data_ok = Request(b'DATA OK', 7)
 
+        self.length = 0
         self.raw_data = bytearray()
+        self.data = bytearray()
         self.mode = Mode
 
         self.sock.bind((self.host, self.port))
@@ -119,83 +124,94 @@ class TrainServer:
         self.nis = NeuralImportanceSampling(_config)
 
     def connect(self):
-        print(f"Waiting for connection by {self.host}")
+        logging.info(f"Waiting for connection by {self.host}")
         self.connection, address = self.sock.accept()
-        print(f"Connected by {self.host} successfully")
+        logging.info(f"Connected by {self.host} successfully")
 
     def close(self):
         self.connection.close()
 
-    def receive_raw(self):
-        try:
-            self.raw_data = bytearray()
-            while True:
-                    chunk = self.connection.recv(self.BUFSIZE)
-                    self.raw_data.extend(chunk)
-                    if len(chunk) < self.BUFSIZE:
-                        break
-        except ConnectionError:
-            print(f"Error: Connection failed ...\n")
+    def receive_length(self):
+        self.length = int.from_bytes(self.connection.recv(4), 'little')
 
-    # stub
+    def receive_raw(self):
+        self.raw_data = bytearray()
+        bytes_recd = 0
+        while bytes_recd < self.length:
+            chunk = self.connection.recv(min(self.length - bytes_recd, self.BUFSIZE))
+            if chunk == b'':
+                raise RuntimeError("socket connection broken")
+            self.raw_data.extend(chunk)
+            bytes_recd = bytes_recd + len(chunk)
+
+    def send(self, data):
+        try:
+            self.connection.sendall(data)
+        except ConnectionError:
+            logging.error(f"Client was disconnected suddenly while sending\n")
+
     def make_infer(self):
-        points = np.frombuffer(self.raw_data[1:], dtype=np.float32).reshape((-1, self.config.num_context_features))
+        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features))
         [samples, pdfs] = self.nis.get_samples(points)
         return [samples, pdfs]
 
-    # stub
     def make_train(self):
-        context = np.frombuffer(self.raw_data[1:], dtype=np.float32).reshape((-1, self.config.num_context_features + 1))
+        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 1))
         train_result = self.nis.train(context=context)
 
     def process(self):
         try:
-            mode = Mode.INFERENCE if chr(self.raw_data[0]) == 'i' else Mode.TRAIN
-            print('Debug: Mode =', mode)
-            print('Debug: Data =', np.frombuffer(self.raw_data[1:], dtype=np.float32))
-            if mode == Mode.TRAIN:
+            logging.debug('Mode = %s', self.mode.name)
+            logging.debug('Len = %s, Data = %s', self.length, np.frombuffer(self.raw_data, dtype=np.float32))
+            if self.mode == Mode.TRAIN:
                 self.make_train()
-
                 self.connection.send(self.data_ok.name)
-            elif mode == Mode.INFERENCE:
+            elif self.mode == Mode.INFERENCE:
                 [samples, pdfs] = self.make_infer()
-                raw_data = bytearray()
-                s = samples.cpu().detach().numpy()
-                p = pdfs.cpu().detach().numpy().reshape([-1, 1])
-                raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
-
-                self.connection.send(self.put.name)
-                answer = self.connection.recv(self.put_ok.length)
-                if answer == self.put_ok.name:
+                self.connection.send(self.put_infer.name)
+                answer = self.connection.recv(self.put_infer_ok.length)
+                if answer == self.put_infer_ok.name:
+                    raw_data = bytearray()
+                    s = samples.cpu().detach().numpy()
+                    p = pdfs.cpu().detach().numpy().reshape([-1, 1])
+                    raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
+                    self.connection.send(len(raw_data).to_bytes(4, 'little'))
                     self.connection.sendall(raw_data)
                     answer = self.connection.recv(self.data_ok.length)
                     if answer == self.data_ok.name:
-                        print('Info: Inference data was sent successfully ...\n')
+                        logging.info('Inference data was sent successfully ...\n')
                     else:
-                        print('Error: Inference data wasn\'t sent ...\n')
+                        logging.error('Inference data wasn\'t sent ...\n')
                 else:
-                    print('Error: Answer is not equal ' + self.put_ok.name + '\n')
+                    logging.error('Answer is not equal ' + self.put_ok.name)
             else:
-                print('Error: Unknown packet type ...\n')
+                logging.error('Unknown packet type ...')
 
         except ConnectionError:
-            print(f"Error: Connection failed ...\n")
+            logging.error(f"Connection failed ...")
 
     def run(self):
         self.nis.initialize()
         self.connect()
         try:
-            print('Debug: Server started ...\n')
+            logging.debug('Server started ...')
             while True:
-                cmd = self.connection.recv(self.put.length)
-                if cmd == self.put.name:
-                    self.connection.send(self.put_ok.name)
+                cmd = self.connection.recv(self.put_infer.length)
+                if cmd == self.put_infer.name:
+                    self.mode = Mode.INFERENCE
+                    self.connection.send(self.put_infer_ok.name)
+                    self.receive_length()
+                    self.receive_raw()
+                    self.process()
+                elif cmd == self.put_train.name:
+                    self.mode = Mode.TRAIN
+                    self.connection.send(self.put_train_ok.name)
+                    self.receive_length()
                     self.receive_raw()
                     self.process()
 
         except ConnectionError:
-            print(f"Error: Connection failed ...\n")
-
+            logging.error(f"Connection failed ...")
         finally:
             self.close()
 
@@ -370,10 +386,6 @@ def parse_args(arg=sys.argv[1:]):
         '-c', '--config', required=True,
         help='Configuration file path')
 
-    train_parser.add_argument(
-        '-sr', '--server', required=False,
-        help='Server mode')
-
     return train_parser.parse_args(arg)
 
 
@@ -387,8 +399,8 @@ if __name__ == '__main__':
     config = pyhocon_wrapper.parse_file(options.config)
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
 
-    if options.server:
-        server_processing(experiment_config)
+    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+    server_processing(experiment_config)
     #server = threading.Thread(target=server_processing, args=(experiment_config,))
     #server.start()
 
