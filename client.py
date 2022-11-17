@@ -16,7 +16,7 @@ class Client:
         self.host = socket.gethostname()
         self.port = 8888
         self.client_socket = socket.socket()
-        self.num_points = 10
+        self.num_points = 100
         self.BUFSIZE = 8192
         self.points_data = None             # {x, y, z, s1, s2, pdf}
         self.put_infer = Request(b'PUT INFER', 9)
