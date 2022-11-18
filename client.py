@@ -85,11 +85,11 @@ class Client:
         lum = np.stack((y,) * 3, axis=-1)
         scale = np.array([3, 3, 3])
         lum = lum / scale
-        self.points_data = np.concatenate((self.points_data, lum.reshape([self.num_points, 3])), axis=1, dtype=np.float32)
-        self.client_socket.send(len(self.points_data[:, [9,10,11,0,1,2,3,4,5,6,7,8]].tobytes()).to_bytes(4, 'little'))  # bytes
+        self.points_data = np.concatenate((self.points_data, lum.reshape([len(lum), 3])), axis=1, dtype=np.float32)
+        self.client_socket.send(len(self.points_data[:, [13,14,15,0,1,2,3,4,5,6,7,8]].tobytes()).to_bytes(4, 'little'))  # bytes
 
         raw_data = bytearray()
-        raw_data.extend(self.points_data[:, [9,10,11,0,1,2,3,4,5,6,7,8]].tobytes())    #send r,g,b x, y, z, norm_x, norm_y, norm_z, dir_x, dir_y, dir_z
+        raw_data.extend(self.points_data[:, [13,14,15,0,1,2,3,4,5,6,7,8]].tobytes())    #send r,g,b x, y, z, norm_x, norm_y, norm_z, dir_x, dir_y, dir_z
         self.client_socket.send(raw_data)
 
         answer = self.client_socket.recv(self.data_ok.length)

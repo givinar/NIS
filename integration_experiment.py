@@ -156,7 +156,11 @@ class TrainServer:
 
     def make_train(self):
         context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3 + 3))
-        train_result = self.nis.train(context=context)
+        lum = context[:,0] + context[:,1] + context[:,2]
+        tdata = context[:, [3, 4, 5, 6, 7, 8]]
+        tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1,
+                                          dtype=np.float32)
+        train_result = self.nis.train(context=tdata)
 
     def process(self):
         try:

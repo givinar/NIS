@@ -199,9 +199,8 @@ class Integrator():
         # But in the future we might change sampling dist so good to have
 
         # Process #
-        context_x = context[:, :[3-11]]
-        rgb = context[:, [0-2]]
-        context_y = 3 * rgb[0] + 3*rgb[1] + 3*rgb[2]
+        context_x = context[:, :-1]
+        context_y = context[:, -1]
         train_result = []
         for batch_x, batch_y, batch_z in DataLoader(dataset=TensorDataset(torch.Tensor(context_x),
                                                                           torch.Tensor(context_y),
