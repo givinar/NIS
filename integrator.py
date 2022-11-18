@@ -227,10 +227,10 @@ class Integrator():
             self.optimizer.step()
             if self.scheduler is not None:
                 self.scheduler.step(self.global_step)
-            self.global_step += 1
 
             # Integral #
-            return_dict = {'loss': loss.to('cpu').item()}
+            return_dict = {'loss': loss.to('cpu').item(), 'epoch': self.global_step}
+            self.global_step += 1
             if lr:
                 return_dict['lr'] = self.optimizer.param_groups[0]['lr']
             if integral:

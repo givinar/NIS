@@ -17,7 +17,7 @@ import functions
 from network import MLP
 from transform import CompositeTransform
 from utils import pyhocon_wrapper
-from visualize import visualize
+from visualize import visualize, FunctionVisualizer
 
 # Using by server
 import socket
@@ -49,6 +49,8 @@ class ExperimentConfig:
     epochs: Number of epochs
     loss_func: Name of the loss function in divergences (default = MSE)
     batch_size: Batch size
+    save_plots: save plots if ndims >= 2
+    plot_dimension: add 2d or 3d plot
     save_plt_interval: Frequency for plot saving (default : 10)
     wandb_project: Name of wandb project in neural_importance_sampling team
     use_tensorboard: Use tensorboard logging
@@ -68,6 +70,8 @@ class ExperimentConfig:
     loss_func: str = "MSE"
     batch_size: int = 2000
 
+    save_plots: blob = True
+    plot_dimension: int = 2
     save_plt_interval: int = 10
     wandb_project: Union[str, None] = None
     use_tensorboard: bool = False
@@ -93,6 +97,8 @@ class ExperimentConfig:
                                 num_context_features=pyhocon_config.get_int('train.num_context_features'),
                                 wandb_project=pyhocon_config.get_string('logging.tensorboard.wandb_project', None),
                                 use_tensorboard=pyhocon_config.get_bool('logging.tensorboard.use_tensorboard', False),
+                                save_plots=pyhocon_config.get_bool('logging.save_plots', False),
+                                plot_dimension=pyhocon_config.get_int('logging.plot_dimension', 2),
                                 host=pyhocon_config.get_string('server.host', '127.0.0.1'),
                                 port=pyhocon_config.get_int('server.port', 65432),
                                 )
@@ -194,7 +200,7 @@ class TrainServer:
             logging.error(f"Connection failed ...")
 
     def run(self):
-        self.nis.initialize()
+        self.nis.initialize(mode='server')
         self.connect()
         try:
             logging.debug('Server started ...')
@@ -221,11 +227,20 @@ class TrainServer:
 
 class NeuralImportanceSampling:
     def __init__(self, _config: ExperimentConfig):
+        """
+        _config: ExperimentConfig
+        mode: ['server', 'experiment'] - if mode==server, don't use dimension reduction and function in visualization
+        """
         self.config = _config
         self.logs_dir = os.path.join('logs', self.config.experiment_dir_name)
         self.integrator = None
+        self.visualize_object = None
+        self.function_visualizer = None
 
-    def initialize(self):
+    def initialize(self, mode='server'):
+        """
+        mode: ['server', 'experiment'] - if mode==server, don't use dimension reduction and function in visualization
+        """
         self.function: functions.Function = getattr(functions, self.config.funcname)(n=self.config.ndims)
         masks = self.create_binary_mask(self.config.ndims)
         flow = CompositeTransform([self.create_base_transform(mask=mask,
@@ -242,11 +257,32 @@ class NeuralImportanceSampling:
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.config.epochs)
 
         self.integrator = Integrator(func=self.function,
-                                flow=flow,
-                                dist=dist,
-                                optimizer=optimizer,
-                                scheduler=scheduler,
-                                loss_func=self.config.loss_func)
+                                        flow=flow,
+                                        dist=dist,
+                                        optimizer=optimizer,
+                                        scheduler=scheduler,
+                                        loss_func=self.config.loss_func)
+
+        self.means =  []
+        self.errors = []
+        self.loss = []
+        if mode == "server":
+            visualize_function = None
+        else:
+            visualize_function = self.function
+        if self.config.save_plots and self.config.ndims >= 2:
+            self.visualize_object = visualize(os.path.join(self.logs_dir, 'plots'))
+            self.function_visualizer = FunctionVisualizer(vis_object=self.visualize_object, function=visualize_function,
+                                                          input_dimension=self.config.ndims,
+                                                          max_plot_dimension=self.config.plot_dimension)
+        if self.config.use_tensorboard:
+            if self.config.wandb_project is not None:
+                import wandb
+                wandb.tensorboard.patch(root_logdir=self.logs_dir)
+                wandb.init(project=self.config.wandb_project, config=asdict(self.config), sync_tensorboard=True,
+                           entity="neural_importance_sampling")
+            self.tb_writer = SummaryWriter(log_dir=self.logs_dir)
+            self.tb_writer.add_text("Config", '\n'.join([f"{k.rjust(20, ' ')}: {v}" for k, v in asdict(self.config).items()]))
 
     def create_base_transform(self, mask, coupling_name, hidden_dim, n_hidden_layers, blob, piecewise_bins,
                               num_context_features=0):
@@ -298,7 +334,49 @@ class NeuralImportanceSampling:
         return self.integrator.sample_with_context(context, jacobian=True)
 
     def train(self, context):
-        return self.integrator.train_with_context(context=context, lr=False, integral=False, points=False)
+        train_result = self.integrator.train_with_context(context=context, lr=False, integral=True, points=True)
+        for epoch_result in train_result:
+            if self.visualize_object:
+                self.visualize_train_step(epoch_result)
+            if self.config.use_tensorboard:
+                self.log_tensorboard_train_step(epoch_result)
+        return train_result
+
+    def visualize_train_step(self, train_result):
+
+        self.means.append(train_result['mean'])
+        self.errors.append(train_result['uncertainty'])
+        self.loss.append(train_result['loss'])
+        mean_wgt = np.sum(self.means / np.power(self.errors, 2), axis=-1)
+        err_wgt = np.sum(1. / (np.power(self.errors, 2)), axis=-1)
+        mean_wgt /= err_wgt
+        err_wgt = 1 / np.sqrt(err_wgt)
+
+        dict_val = {'$I^{%s}$' % self.config.coupling_name: [mean_wgt, 0]}
+        dict_error = {'$\sigma_{I}^{%s}$' % self.config.coupling_name: [err_wgt, 0]}
+        dict_loss = {'$I^{I}^{%s}$': [err_wgt, 0]}
+        self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral value",
+                                        dict_val=dict_val)
+        self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral uncertainty",
+                                        dict_val=dict_error)
+        self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Loss",
+                                        dict_val=dict_error)
+        if self.config.save_plots and self.config.ndims >= 2:  # if 2D -> visualize distribution
+            visualize_x = self.function_visualizer.add_trained_function_plot(x=train_result['x'].detach().numpy(),
+                                                                        plot_name="Cumulative %s" % self.config.coupling_name)
+            self.visualize_object.AddPointSet(visualize_x, title="Observed $x$ %s" % self.config.coupling_name, color='b')
+            self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
+            # Plot function output #
+        if train_result['epoch'] % self.config.save_plt_interval == 0:
+            if self.config.save_plots and self.config.ndims >= 2:
+                self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
+
+            self.visualize_object.MakePlot(train_result['epoch'])
+
+    def log_tensorboard_train_step(self, train_result):
+        self.tb_writer.add_scalar('Train/Loss', train_result['loss'], self.integrator.global_step)
+        self.tb_writer.add_scalar('Train/Integral', train_result['mean_wgt'], self.integrator.global_step)
+        self.tb_writer.add_scalar('Train/LR', train_result['lr'], self.integrator.global_step)
 
     def run_experiment(self):
 
