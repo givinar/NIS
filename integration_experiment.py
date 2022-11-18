@@ -33,7 +33,6 @@ class Mode(Enum):
     TRAIN = 0
     INFERENCE = 1
 
-
 @dataclass
 class ExperimentConfig:
     """
@@ -73,7 +72,7 @@ class ExperimentConfig:
     wandb_project: Union[str, None] = None
     use_tensorboard: bool = False
     host: str = '127.0.0.1'
-    port: int = 8888
+    port: int = 65432
 
     @classmethod
     def init_from_pyhocon(cls, pyhocon_config: pyhocon_wrapper.ConfigTree):
@@ -95,14 +94,14 @@ class ExperimentConfig:
                                 wandb_project=pyhocon_config.get_string('logging.tensorboard.wandb_project', None),
                                 use_tensorboard=pyhocon_config.get_bool('logging.tensorboard.use_tensorboard', False),
                                 host=pyhocon_config.get_string('server.host', '127.0.0.1'),
-                                port=pyhocon_config.get_int('server.port', 8888),
+                                port=pyhocon_config.get_int('server.port', 65432),
                                 )
 
 
 class TrainServer:
     def __init__(self, _config: ExperimentConfig):
         self.config = _config
-        self.host = socket.gethostname()
+        self.host = self.config.host
         self.port = self.config.port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.NUM_CONNECTIONS = 5
@@ -156,7 +155,7 @@ class TrainServer:
         return [samples, pdfs]
 
     def make_train(self):
-        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 1))
+        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3 + 3))
         train_result = self.nis.train(context=context)
 
     def process(self):
