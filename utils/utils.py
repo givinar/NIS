@@ -1,5 +1,8 @@
+import numpy as np
 import torch
 import utils
+import math
+
 
 def is_bool(x):
     return isinstance(x, bool)
@@ -171,3 +174,61 @@ def get_temperature(max_value, bound=1-1e-3):
     temperature = min(- (1 / max_value) * (torch.log1p(-bound) - torch.log(bound)), 1)
     return temperature
 
+
+# Create a vector orthogonal to a passed one.
+def ortho_vector(n: np.ndarray):
+    p = np.array([0, 0, 0], float)
+    if math.fabs(n[2]) > 0.0:
+        k = math.sqrt(n[1] * n[1] + n[2] * n[2])
+        p[0] = 0
+        p[1] = -n[2] / k
+        p[2] = n[1] / k
+    else:
+        k = math.sqrt(n[0] * n[0] + n[1] * n[1])
+        p[0] = n[1] / k
+        p[1] = -n[0] / k
+        p[2] = 0
+
+    return p
+
+
+# Maps sample in the unit square onto a hemisphere,
+# defined by a normal vector with a cosine-weighted distribution
+# with power e.
+def map_to_hemisphere(s: np.ndarray, n: np.ndarray, e=1.):
+    #Construct basis
+    u = ortho_vector(n)
+    v = np.cross(u, n)
+    u = np.cross(n, v)
+
+    # Calculate 2D sample
+    r1 = s[0]
+    r2 = s[1]
+
+    # Transform to spherical coordinates
+    sin_psi = math.sin(2. * np.pi*r1)
+    cos_psi = math.cos(2. * np.pi*r1)
+    cos_theta = math.pow(1. - r2, 1. / (e + 1.))
+    sin_theta = math.sqrt(1. - cos_theta * cos_theta)
+
+    vec = u * sin_theta * cos_psi + v * sin_theta * sin_psi + n * cos_theta
+    norm_vec = vec / np.linalg.norm(vec)
+    # Return the result
+    return norm_vec
+
+
+# Getting samples similar to HIBRID
+def get_test_samples(points: np.ndarray):
+
+    norm_pts = points[:, 3:]
+    lights = np.zeros(norm_pts.shape)
+    pdfs = np.zeros(norm_pts.shape[0])
+
+    for i in range(norm_pts.shape[0]):
+        s = np.random.uniform(0., 1., 2)
+        norm = norm_pts[i]
+        light = map_to_hemisphere(s, norm)
+        lights[i] = light
+        pdfs[i] = np.dot(norm, light) / np.linalg.norm(norm) / np.linalg.norm(light) / np.pi
+
+    return [lights, pdfs]

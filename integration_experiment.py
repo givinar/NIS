@@ -16,7 +16,7 @@ from integrator import Integrator
 import functions
 from network import MLP
 from transform import CompositeTransform
-from utils import pyhocon_wrapper
+from utils import pyhocon_wrapper, utils
 from visualize import visualize, FunctionVisualizer
 
 # Using by server
@@ -155,10 +155,13 @@ class TrainServer:
         except ConnectionError:
             logging.error(f"Client was disconnected suddenly while sending\n")
 
-    def make_infer(self):
+    def make_infer(self, test: bool = False):
         points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features))
-        [samples, pdfs] = self.nis.get_samples(points)
-        return [samples, pdfs]
+        if test:
+            [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
+        else:
+            [samples, pdfs] = self.nis.get_samples(points)
+        return [samples, pdfs]  # lights, pdfs
 
     def make_train(self):
         context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3 + 3))
@@ -176,7 +179,7 @@ class TrainServer:
                 self.make_train()
                 self.connection.send(self.data_ok.name)
             elif self.mode == Mode.INFERENCE:
-                [samples, pdfs] = self.make_infer()
+                [samples, pdfs] = self.make_infer(True)
                 self.connection.send(self.put_infer.name)
                 answer = self.connection.recv(self.put_infer_ok.length)
                 if answer == self.put_infer_ok.name:
