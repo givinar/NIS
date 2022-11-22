@@ -33,7 +33,7 @@ class Client:
         self.funcname = 'Gaussian'
         self.function: functions.Function = getattr(functions, self.funcname)(n=self.ndims)
 
-    def __receive_raw(self):
+    def receive_raw(self):
         self.raw_data = bytearray()
         bytes_recd = 0
         while bytes_recd < self.length:
@@ -46,7 +46,7 @@ class Client:
     def receive_length(self):
         self.length = int.from_bytes(self.client_socket.recv(4), 'little')
 
-    def __connect(self):
+    def connect(self):
         print("Client: connecting..")
         self.client_socket.connect((self.host, self.port))
         print("Client: connected to the server")
@@ -70,7 +70,7 @@ class Client:
         if data == self.put_infer.name:
             self.client_socket.send(self.put_infer_ok.name)
             self.receive_length()
-            self.__receive_raw()
+            self.receive_raw()
             self.client_socket.send(self.data_ok.name)
 
         np_data = np.frombuffer(self.raw_data, dtype=np.float32)        # s1, s2, s3, pdf
@@ -111,7 +111,7 @@ class Client:
                 self.__send_radiance()
 
     def run_client(self):
-        self.__connect()
+        self.connect()
         self.__processing()
         self.__disconnect()
 
