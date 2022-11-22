@@ -69,6 +69,7 @@ class ExperimentConfig:
     epochs: int = 100
     loss_func: str = "MSE"
     batch_size: int = 2000
+    test_samples: bool = False
 
     save_plots: blob = True
     plot_dimension: int = 2
@@ -92,6 +93,7 @@ class ExperimentConfig:
                                 save_plt_interval=pyhocon_config.get_int('logging.save_plt_interval', 5),
                                 experiment_dir_name=pyhocon_config.get_string('logging.plot_dir_name',
                                                                               cls.experiment_dir_name),
+                                test_samples=pyhocon_config.get_bool('train.test_samples', False),
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
                                 num_context_features=pyhocon_config.get_int('train.num_context_features'),
@@ -128,10 +130,12 @@ class TrainServer:
         self.sock.listen(self.NUM_CONNECTIONS)
         self.nis = NeuralImportanceSampling(_config)
 
+        self.test_samples = self.config.test_samples
+
     def connect(self):
-        logging.info(f"Waiting for connection by {self.host}")
+        print(f"Waiting for connection by {self.host}")
         self.connection, address = self.sock.accept()
-        logging.info(f"Connected by {self.host} successfully")
+        print(f"Connected by {self.host} successfully")
 
     def close(self):
         self.connection.close()
@@ -155,21 +159,26 @@ class TrainServer:
         except ConnectionError:
             logging.error(f"Client was disconnected suddenly while sending\n")
 
-    def make_infer(self, test: bool = False):
+    def make_infer(self):
         points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features))
-        if test:
+        if self.test_samples:
             [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
+            print("s1 = ", samples[0,:].numpy(), "s2 = ", samples[1,:].numpy())
+            print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy())
         else:
             [samples, pdfs] = self.nis.get_samples(points)
         return [samples, pdfs]  # lights, pdfs
 
     def make_train(self):
         context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3 + 3))
-        lum = context[:,0] + context[:,1] + context[:,2]
-        tdata = context[:, [3, 4, 5, 6, 7, 8]]
-        tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1,
+        if self.test_samples:
+            lum = context[:,0] + context[:,1] + context[:,2]
+            tdata = context[:, [3, 4, 5, 6, 7, 8]]
+            tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1,
                                           dtype=np.float32)
-        train_result = self.nis.train(context=tdata)
+            train_result = self.nis.train(context=tdata)
+        else:
+            pass
 
     def process(self):
         try:
@@ -179,7 +188,7 @@ class TrainServer:
                 self.make_train()
                 self.connection.send(self.data_ok.name)
             elif self.mode == Mode.INFERENCE:
-                [samples, pdfs] = self.make_infer(True)
+                [samples, pdfs] = self.make_infer()
                 self.connection.send(self.put_infer.name)
                 answer = self.connection.recv(self.put_infer_ok.length)
                 if answer == self.put_infer_ok.name:
@@ -483,7 +492,7 @@ if __name__ == '__main__':
     config = pyhocon_wrapper.parse_file(options.config)
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
 
-    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
     server_processing(experiment_config)
     #server = threading.Thread(target=server_processing, args=(experiment_config,))
     #server.start()
