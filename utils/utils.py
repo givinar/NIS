@@ -229,5 +229,5 @@ def get_test_samples(points: np.ndarray):
         norm = norm_pts[i]
         light = map_to_hemisphere(s, norm)
         lights[i] = light
-        pdfs[i] = np.dot(norm, light) / np.linalg.norm(norm) / np.linalg.norm(light) / np.pi
+        pdfs[i] = np.dot(norm, light) / np.pi
     return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]

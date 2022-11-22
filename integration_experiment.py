@@ -163,10 +163,17 @@ class TrainServer:
         points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features))
         if self.test_samples:
             [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
-            print("s1 = ", samples[0,:].numpy(), "s2 = ", samples[1,:].numpy())
-            print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy())
+            l = np.linalg.norm(samples, axis=-1)
+            v = np.abs(l - 1)
+            res = np.all(v <= np.finfo(np.float32).eps)
+            if not res:
+                logging.warning("Vector not equ 1")
+
         else:
             [samples, pdfs] = self.nis.get_samples(points)
+
+        print("s1 = ", samples[0, :].numpy(), "s2 = ", samples[1, :].numpy())
+        print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy())
         return [samples, pdfs]  # lights, pdfs
 
     def make_train(self):
