@@ -231,4 +231,4 @@ def get_test_samples(points: np.ndarray):
         lights[i] = light
         pdfs[i] = np.dot(norm, light) / np.linalg.norm(norm) / np.linalg.norm(light) / np.pi
 
-    return [lights, pdfs]
+    return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]
