@@ -93,7 +93,7 @@ class ExperimentConfig:
                                 save_plt_interval=pyhocon_config.get_int('logging.save_plt_interval', 5),
                                 experiment_dir_name=pyhocon_config.get_string('logging.plot_dir_name',
                                                                               cls.experiment_dir_name),
-                                test_samples=pyhocon_config.get_bool('train.test_samples', False),
+                                hybrid_sampling=pyhocon_config.get_bool('train.hybrid_sampling', False),
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
                                 num_context_features=pyhocon_config.get_int('train.num_context_features'),
@@ -130,7 +130,7 @@ class TrainServer:
         self.sock.listen(self.NUM_CONNECTIONS)
         self.nis = NeuralImportanceSampling(_config)
 
-        self.test_samples = self.config.test_samples
+        self.hybrid_sampling = self.config.hybrid_sampling
 
     def connect(self):
         print(f"Waiting for connection by {self.host}")
@@ -161,7 +161,7 @@ class TrainServer:
 
     def make_infer(self):
         points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features))
-        if self.test_samples:
+        if self.hybrid_sampling:
             [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
             l = np.linalg.norm(samples, axis=-1)
             v = np.abs(l - 1)
@@ -178,7 +178,7 @@ class TrainServer:
 
     def make_train(self):
         context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3 + 3))
-        if self.test_samples:
+        if self.hybrid_sampling:
             pass
         else:
             lum = context[:, 0] + context[:, 1] + context[:, 2]
