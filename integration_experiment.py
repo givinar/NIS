@@ -69,7 +69,7 @@ class ExperimentConfig:
     epochs: int = 100
     loss_func: str = "MSE"
     batch_size: int = 2000
-    test_samples: bool = False
+    hybrid_sampling: bool = False
 
     save_plots: blob = True
     plot_dimension: int = 2
@@ -129,7 +129,6 @@ class TrainServer:
         self.sock.bind((self.host, self.port))
         self.sock.listen(self.NUM_CONNECTIONS)
         self.nis = NeuralImportanceSampling(_config)
-
         self.hybrid_sampling = self.config.hybrid_sampling
 
     def connect(self):

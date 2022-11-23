@@ -20,8 +20,8 @@ train
   num_piecewise_bins = 5
   loss = MSE
   num_context_features = 6
-  coupling_name="piecewiseLinear",
   hybrid_sampling = False
+  coupling_name="piecewiseLinear",
 }
 logging
 {
