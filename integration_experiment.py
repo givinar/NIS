@@ -78,6 +78,7 @@ class ExperimentConfig:
     use_tensorboard: bool = False
     host: str = '127.0.0.1'
     port: int = 65432
+    hybrid_sampling: bool = False
 
     @classmethod
     def init_from_pyhocon(cls, pyhocon_config: pyhocon_wrapper.ConfigTree):

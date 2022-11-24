@@ -40,6 +40,13 @@ Client:
 ```
 client.py
 ```
+## Tests
+For testing use the `pytest` module:
 
+`pip install pytest`
+
+To test the application, run the command in the terminal inside the project folder:
+
+`...\NIS>pytest`
 
 
