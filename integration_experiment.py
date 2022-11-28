@@ -130,6 +130,7 @@ class TrainServer:
         self.sock.listen(self.NUM_CONNECTIONS)
         self.nis = NeuralImportanceSampling(_config)
         self.hybrid_sampling = self.config.hybrid_sampling
+        self.counter = 0
 
     def connect(self):
         print(f"Waiting for connection by {self.host}")
@@ -173,8 +174,8 @@ class TrainServer:
         #if not res:
         #    logging.warning("Vector not equ 1")
 
-        print("s1 = ", norm_samples[0, :].numpy(), "s2 = ", norm_samples[1, :].numpy())
-        print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy())
+        #print("s1 = ", norm_samples[0, :].numpy(), "s2 = ", norm_samples[1, :].numpy())
+        #print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy())
         return [norm_samples, pdfs]  # lights, pdfs
 
     def make_train(self):
@@ -190,8 +191,10 @@ class TrainServer:
 
     def process(self):
         try:
+            self.counter += 1
+            print("Iteration: ", self.counter)
             logging.debug('Mode = %s', self.mode.name)
-            logging.debug('Len = %s, Data = %s', self.length, np.frombuffer(self.raw_data, dtype=np.float32))
+            #logging.debug('Len = %s, Data = %s', self.length, np.frombuffer(self.raw_data, dtype=np.float32))
             if self.mode == Mode.TRAIN:
                 self.make_train()
                 self.connection.send(self.data_ok.name)
