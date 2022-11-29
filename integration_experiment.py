@@ -7,6 +7,7 @@ from typing import Union
 
 import numpy as np
 import torch
+import math
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
@@ -205,6 +206,10 @@ class TrainServer:
                 if answer == self.put_infer_ok.name:
                     raw_data = bytearray()
                     s = samples.cpu().detach().numpy()
+                    s[:, 0] = s[:, 0] * math.pi
+                    s[:, 1] = s[:, 1] * 2 * math.pi
+                    z = torch.zeros(s.shape[0])
+                    s = np.concatenate((s, z.reshape([len(z), 1])), axis=1, dtype=np.float32)
                     p = pdfs.cpu().detach().numpy().reshape([-1, 1])
                     raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
                     self.connection.send(len(raw_data).to_bytes(4, 'little'))
@@ -313,7 +318,7 @@ class NeuralImportanceSampling:
                                                                         out_shape=[out_features],
                                                                         hidden_sizes=[hidden_dim] * n_hidden_layers,
                                                                         hidden_activation=nn.ReLU(),
-                                                                        output_activation=None)
+                                                                        output_activation=nn.Sigmoid())
         if coupling_name == 'additive':
             return AdditiveCouplingTransform(mask, transform_net_create_fn, blob,
                                              num_context_features=num_context_features)
@@ -508,6 +513,7 @@ if __name__ == '__main__':
     #server = threading.Thread(target=server_processing, args=(experiment_config,))
     #server.start()
 
+    #experiment_config.num_context_features = 0
     #nis = NeuralImportanceSampling(experiment_config)
     #nis.initialize()
     #nis.run_experiment()
