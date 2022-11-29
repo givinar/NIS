@@ -55,7 +55,7 @@ class Client:
         self.client_socket.close()
         print("Client: disconnected from the server")
 
-    def __get_samples(self):
+    def get_samples(self):
         print("----> Infer")
         points = np.random.random((self.num_points, 9)).astype(np.float32)  # pos_x, pos_y, pos_z, norm_x, norm_y, norm_z, dir_x, dir_y, dir_z
                                                                             # dir_? right now is not taken into account right now
@@ -77,7 +77,7 @@ class Client:
         samples = np_data.reshape((self.num_points, -1))
         self.points_data = np.concatenate((points, samples), axis=1)
 
-    def __send_radiance(self):
+    def send_radiance(self):
         print("----> Train")
         t_data = torch.tensor(self.points_data[:, [9, 10, 11]]) # s1, s2, s3
         t_y = self.function(t_data)
@@ -102,13 +102,13 @@ class Client:
             answer = self.client_socket.recv(self.put_infer_ok.length)
             print('Received from server: ' + answer.decode())
             if answer == self.put_infer_ok.name:
-                self.__get_samples()
+                self.get_samples()
 
             self.client_socket.send(self.put_train.name)
             answer = self.client_socket.recv(self.put_train_ok.length)
             print('Received from server: ' + answer.decode())
             if answer == self.put_train_ok.name:
-                self.__send_radiance()
+                self.send_radiance()
 
     def run_client(self):
         self.connect()
