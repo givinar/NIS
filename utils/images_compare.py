@@ -26,7 +26,6 @@ class ImageCompare:
     def __post_init__(self):
         gt_tsr = self.load_exr(self.gt_image)
         self.gt_pil_img = Image.fromarray(np.uint8(gt_tsr * 255.))
-        self.length = len(os.listdir(self.img_folder1))
 
     @staticmethod
     def parse_args(arg=sys.argv[1:]):
@@ -79,9 +78,9 @@ class ImageCompare:
         tensor = np_data.reshape((-1, size[1], size[0]))
         return tensor.transpose(1, 2, 0)
 
-    def get_ssim(self, path: str, method: Callable) -> np.ndarray:
-        ssims = np.zeros(self.length, float)
-        indices = np.zeros(self.length, int)
+    def get_ssim(self, path: str, length: int, method: Callable) -> np.ndarray:
+        ssims = np.zeros(length, float)
+        indices = np.zeros(length, int)
         for i, name in enumerate(self.list_files(path)):
             tsr = self.load_exr(name)
             pil_img = Image.fromarray(np.uint8(tsr * 255))
@@ -91,15 +90,18 @@ class ImageCompare:
         return indices, ssims
 
     def show_plot(self):
-        indices1, ssims1 = self.get_ssim(self.img_folder1, compare_ssim)
-        indices2, ssims2 = self.get_ssim(self.img_folder2, compare_ssim)
+        length1 = len(os.listdir(self.img_folder1))
+        length2 = len(os.listdir(self.img_folder2))
+        indices1, ssims1 = self.get_ssim(self.img_folder1, length1, compare_ssim)
+        indices2, ssims2 = self.get_ssim(self.img_folder2, length2, compare_ssim)
 
+        msg = str()
         if indices1.shape[0] != indices2.shape[0]:
-            print(f'Warning: Numbers of images in folders are different ...')
+            msg = ', Warning: Numbers of images in folders are different ...'
 
-        plt.figure('SSIM')
-        plt.plot(indices1, ssims1, color='red', label=os.path.basename(self.img_folder1))
-        plt.plot(indices2, ssims2, color='blue', label=os.path.basename(self.img_folder2))
+        plt.figure('SSIM' + msg)
+        plt.plot(indices1, ssims1, 'r-', label=os.path.basename(self.img_folder1))
+        plt.plot(indices2, ssims2, 'b--', label=os.path.basename(self.img_folder2))
         plt.grid()
         plt.legend()
         plt.show()
