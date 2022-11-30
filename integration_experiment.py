@@ -259,6 +259,7 @@ class NeuralImportanceSampling:
 
         # need for gradient accumulation: we apply optimizer.step() only once after the last training call
         self.train_sampling_call_difference = 0
+        self.context = None
 
     def initialize(self, mode='server'):
         """
@@ -359,7 +360,16 @@ class NeuralImportanceSampling:
 
     def train(self, context):
         self.train_sampling_call_difference -= 1
-        train_result = self.integrator.train_with_context(context=context, lr=False, integral=True, points=True,
+        if self.config.gradient_accumulation:
+            if self.contex is None:
+                self.context = context
+            else:
+                self.context = np.concatenate((self.context, context), axis=0)
+            if self.train_sampling_call_difference != 0:
+                return
+        else:
+            self.context = context
+        train_result = self.integrator.train_with_context(context=self.context, lr=False, integral=True, points=True,
                                                           batch_size=self.config.batch_size,
                                                           apply_optimizer=not self.config.gradient_accumulation)
         for epoch_result in train_result:
@@ -367,8 +377,12 @@ class NeuralImportanceSampling:
                 self.visualize_train_step(epoch_result)
             if self.config.use_tensorboard:
                 self.log_tensorboard_train_step(epoch_result)
-        if self.config.gradient_accumulation and self.train_sampling_call_difference == 0:
+        if self.config.gradient_accumulation:
             self.integrator.apply_optimizer()
+
+        if self.train_sampling_call_difference == 0:
+            self.context = None
+            self.integrator.z_mapper = {}
         return train_result
 
     def visualize_train_step(self, train_result):
