@@ -216,18 +216,28 @@ def map_to_hemisphere(s: np.ndarray, n: np.ndarray, e=1.):
     # Return the result
     return norm_vec
 
+def cartesian_to_spherical(vec: np.ndarray):
+    phi = math.atan2(vec[2], vec[0])
+    if phi < 0:
+        phi += 2 * math.pi
+    theta = math.acos(vec[1])
+    return np.array([phi, theta])
+
 
 # Getting samples similar to HIBRID
 def get_test_samples(points: np.ndarray):
 
     norm_pts = points[:, 3:]
-    lights = np.zeros(norm_pts.shape, dtype=np.float32)
+    lights = np.zeros([norm_pts.shape[0], 2], dtype=np.float32)
+    #lights = np.zeros(norm_pts.shape, dtype=np.float32)
     pdfs = np.zeros(norm_pts.shape[0], dtype=np.float32)
 
     for i in range(norm_pts.shape[0]):
         s = np.random.uniform(0., 1., 2)
-        norm = norm_pts[i]
+        #norm = norm_pts[i]
+        norm = np.array([0, 1, 0])
         light = map_to_hemisphere(s, norm)
-        lights[i] = light
         pdfs[i] = np.dot(norm, light) / np.pi
+        light = cartesian_to_spherical(light)
+        lights[i] = light
     return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]

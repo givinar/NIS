@@ -166,8 +166,8 @@ class TrainServer:
             [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
         else:
             [samples, pdfs] = self.nis.get_samples(points)
+            samples = torch.nn.functional.normalize(samples)
 
-        norm_samples = torch.nn.functional.normalize(samples)
 
         #l = np.linalg.norm(norm_samples, axis=-1)
         #v = np.abs(l - 1)
@@ -177,7 +177,7 @@ class TrainServer:
 
         #print("s1 = ", norm_samples[0, :].numpy(), "s2 = ", norm_samples[1, :].numpy())
         #print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy())
-        return [norm_samples, pdfs]  # lights, pdfs
+        return [samples, pdfs]  # lights, pdfs
 
     def make_train(self):
         context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3 + 3))
@@ -206,8 +206,8 @@ class TrainServer:
                 if answer == self.put_infer_ok.name:
                     raw_data = bytearray()
                     s = samples.cpu().detach().numpy()
-                    s[:, 0] = s[:, 0] * math.pi
-                    s[:, 1] = s[:, 1] * 2 * math.pi
+                    #s[:, 0] = s[:, 0] * math.pi / 2
+                    #s[:, 1] = s[:, 1] * 2 * math.pi
                     z = torch.zeros(s.shape[0])
                     s = np.concatenate((s, z.reshape([len(z), 1])), axis=1, dtype=np.float32)
                     p = pdfs.cpu().detach().numpy().reshape([-1, 1])
