@@ -176,7 +176,7 @@ class TrainServer:
         #    logging.warning("Vector not equ 1")
 
         #print("s1 = ", norm_samples[0, :].numpy(), "s2 = ", norm_samples[1, :].numpy())
-        #print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy())
+        print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy())
         return [samples, pdfs]  # lights, pdfs
 
     def make_train(self):
