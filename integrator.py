@@ -202,7 +202,7 @@ class Integrator():
 
         # Process #
         context_x = context[:, :-1]
-        context_y = context[:, -1]
+        context_y = context[:, -1] + np.finfo(np.float32).eps
         train_result = []
         for batch_x, batch_y, batch_z in DataLoader(dataset=TensorDataset(torch.Tensor(context_x),
                                                                           torch.Tensor(context_y),

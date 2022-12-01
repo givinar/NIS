@@ -361,7 +361,7 @@ class NeuralImportanceSampling:
     def train(self, context):
         self.train_sampling_call_difference -= 1
         if self.config.gradient_accumulation:
-            if self.contex is None:
+            if self.context is None:
                 self.context = context
             else:
                 self.context = np.concatenate((self.context, context), axis=0)
