@@ -166,7 +166,6 @@ class Integrator():
         z = self.dist.sample((nsamples,)).to(self.device)
         x, absdet = self.flow(z)
         y = self._func(x)
-
         if yield_samples:
             return (y/absdet).to('cpu'), x.to('cpu')
 
@@ -222,12 +221,17 @@ class Integrator():
             y = batch_y.to(self.device)
             y = y + np.finfo(np.float32).eps
 
-            mean = torch.mean(y / absdet)
-            var = torch.var(y / absdet)
-            y = (y / mean).detach()
+            log_y = torch.log(y)
+            log_absdet = torch.log(absdet)
+            #mean = torch.mean(y / absdet)
+            mean = torch.mean(-log_absdet - log_y)
+            var = torch.var(y * absdet)
+            #var = torch.var(y / absdet)
+            #y = (y / mean).detach()
 
             # Backprop #
-            loss = self.loss_func(y, absdet)
+            #loss = self.loss_func(y, absdet)
+            loss = mean
 
             #print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------

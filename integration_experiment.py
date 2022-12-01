@@ -131,7 +131,11 @@ class TrainServer:
         self.sock.listen(self.NUM_CONNECTIONS)
         self.nis = NeuralImportanceSampling(_config)
         self.hybrid_sampling = self.config.hybrid_sampling
+
         self.counter = 0
+        self.infer_counter = 0
+        self.acc_pdf_o = 0
+        self.acc_pdf_t = 0
 
     def connect(self):
         print(f"Waiting for connection by {self.host}")
@@ -166,7 +170,10 @@ class TrainServer:
             [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
         else:
             [samples, pdfs] = self.nis.get_samples(points)
-            samples = torch.nn.functional.normalize(samples)
+            samples[:, 0] = samples[:, 0] * math.pi / 2
+            samples[:, 1] = samples[:, 1] * 2 * math.pi
+            pdfs /= 2 * math.pi
+            #samples = torch.nn.functional.normalize(samples)
 
 
         #l = np.linalg.norm(norm_samples, axis=-1)
@@ -175,8 +182,13 @@ class TrainServer:
         #if not res:
         #    logging.warning("Vector not equ 1")
 
-        #print("s1 = ", norm_samples[0, :].numpy(), "s2 = ", norm_samples[1, :].numpy())
-        print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy())
+        #print("s1 = ", samples[0, :].numpy(), "s2 = ", samples[1, :].numpy(), "s_end = ", samples[-1, :].numpy())
+        print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy(), "pdf_end = ", pdfs[-1].numpy())
+        self.infer_counter += 1
+        self.acc_pdf_o += pdfs[0].numpy()
+        self.acc_pdf_t += pdfs[1].numpy()
+        print("Integral pdf1 = ", self.acc_pdf_o/self.infer_counter, "Integral pdf1 = ", self.acc_pdf_t/self.infer_counter)
+
         return [samples, pdfs]  # lights, pdfs
 
     def make_train(self):
@@ -193,7 +205,7 @@ class TrainServer:
     def process(self):
         try:
             self.counter += 1
-            print("Iteration: ", self.counter)
+            #print("Iteration: ", self.counter)
             logging.debug('Mode = %s', self.mode.name)
             #logging.debug('Len = %s, Data = %s', self.length, np.frombuffer(self.raw_data, dtype=np.float32))
             if self.mode == Mode.TRAIN:
@@ -206,8 +218,6 @@ class TrainServer:
                 if answer == self.put_infer_ok.name:
                     raw_data = bytearray()
                     s = samples.cpu().detach().numpy()
-                    #s[:, 0] = s[:, 0] * math.pi / 2
-                    #s[:, 1] = s[:, 1] * 2 * math.pi
                     z = torch.zeros(s.shape[0])
                     s = np.concatenate((s, z.reshape([len(z), 1])), axis=1, dtype=np.float32)
                     p = pdfs.cpu().detach().numpy().reshape([-1, 1])
