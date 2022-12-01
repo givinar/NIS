@@ -201,8 +201,17 @@ class Integrator():
         # But in the future we might change sampling dist so good to have
 
         # Process #
+        # context_x = context[:, :-1]
+        # context_y = context[:, -1] + np.finfo(np.float32).eps
+
         context_x = context[:, :-1]
-        context_y = context[:, -1] + np.finfo(np.float32).eps
+        context_y = context[:, -1]
+
+        nonzero = np.nonzero(context_y)[0]
+        context_x = context_x[nonzero, :]
+        context_y = context_y[nonzero]
+        z = z[nonzero]
+
         train_result = []
         for batch_x, batch_y, batch_z in DataLoader(dataset=TensorDataset(torch.Tensor(context_x),
                                                                           torch.Tensor(context_y),
