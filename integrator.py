@@ -222,17 +222,12 @@ class Integrator():
             y = batch_y.to(self.device)
             y = y + np.finfo(np.float32).eps
 
-            log_y = torch.log(y)
-            log_absdet = torch.log(absdet)
-            #mean = torch.mean(y / absdet)
-            mean = torch.mean(-log_absdet - log_y)
-            var = torch.var(y * absdet)
-            #var = torch.var(y / absdet)
-            #y = (y / mean).detach()
+            mean = torch.mean(y / absdet)
+            var = torch.var(y / absdet)
+            y = (y / mean).detach()
 
             # Backprop #
-            #loss = self.loss_func(y, absdet)
-            loss = mean
+            loss = self.loss_func(y, absdet)
 
             #print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------

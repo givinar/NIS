@@ -229,7 +229,6 @@ def get_test_samples(points: np.ndarray):
 
     norm_pts = points[:, 3:]
     lights = np.zeros([norm_pts.shape[0], 2], dtype=np.float32)
-    #lights = np.zeros(norm_pts.shape, dtype=np.float32)
     pdfs = np.zeros(norm_pts.shape[0], dtype=np.float32)
 
     for i in range(norm_pts.shape[0]):
@@ -237,7 +236,7 @@ def get_test_samples(points: np.ndarray):
         norm_p = norm_pts[i]
         norm = np.array([0, 1, 0])
         light = map_to_hemisphere(s, norm)
-        pdfs[i] = np.dot(norm_p, light) / np.pi
+        pdfs[i] = light[1] / np.pi
         light = cartesian_to_spherical(light)
         lights[i] = light
     return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]
