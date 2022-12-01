@@ -102,6 +102,8 @@ class ImageCompare:
         plt.figure('SSIM' + msg)
         plt.plot(indices1, ssims1, 'r-', label=os.path.basename(self.img_folder1))
         plt.plot(indices2, ssims2, 'b--', label=os.path.basename(self.img_folder2))
+        plt.xlabel('Iterations')
+        plt.ylabel('SSIM')
         plt.grid()
         plt.legend()
         plt.show()
