@@ -29,6 +29,7 @@ class Integrator():
         self.device = device
         self._func = func
         self.global_step = 0
+        self.scheduler_step = 0
         self.flow = flow.to(device)
         self.dist: torch.distributions.Distribution = dist
         self.optimizer = optimizer
@@ -192,7 +193,8 @@ class Integrator():
         else:
             return x.to('cpu')
 
-    def train_with_context(self, context: np.ndarray, batch_size=100, lr=None, points=False, integral=False) -> list:
+    def train_with_context(self, context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
+                           apply_optimizer=True) -> list:
         # Initialize #
         self.flow.train()
 
@@ -213,7 +215,6 @@ class Integrator():
                                                                           z),
                                            batch_size=batch_size):
 
-            self.optimizer.zero_grad()
             x, absdet = self.flow(batch_z, batch_x.to(self.device))
             # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
 
@@ -236,9 +237,8 @@ class Integrator():
             #print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------
 
-            self.optimizer.step()
-            if self.scheduler is not None:
-                self.scheduler.step(self.global_step)
+            if apply_optimizer:
+                self.apply_optimizer()
 
             # Integral #
             return_dict = {'loss': loss.to('cpu').item(), 'epoch': self.global_step}
@@ -254,3 +254,10 @@ class Integrator():
             train_result.append(return_dict)
         return train_result
 
+    def apply_optimizer(self):
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+
+        if self.scheduler is not None:
+            self.scheduler.step(self.scheduler_step)
+            self.scheduler_step += 1

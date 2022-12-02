@@ -70,6 +70,7 @@ class ExperimentConfig:
     epochs: int = 100
     loss_func: str = "MSE"
     batch_size: int = 2000
+    gradient_accumulation: bool = True
     hybrid_sampling: bool = False
 
     save_plots: blob = True
@@ -79,11 +80,13 @@ class ExperimentConfig:
     use_tensorboard: bool = False
     host: str = '127.0.0.1'
     port: int = 65432
+    hybrid_sampling: bool = False
 
     @classmethod
     def init_from_pyhocon(cls, pyhocon_config: pyhocon_wrapper.ConfigTree):
         return ExperimentConfig(epochs=pyhocon_config.get_int('train.epochs'),
                                 batch_size=pyhocon_config.get_int('train.batch_size'),
+                                gradient_accumulation=pyhocon_config.get_bool('train.gradient_accumulation', True),
                                 lr=pyhocon_config.get_float('train.learning_rate'),
                                 hidden_dim=pyhocon_config.get_int('train.num_hidden_dims'),
                                 ndims=pyhocon_config.get_int('train.num_coupling_layers'),
@@ -274,6 +277,9 @@ class NeuralImportanceSampling:
         self.visualize_object = None
         self.function_visualizer = None
 
+        # need for gradient accumulation: we apply optimizer.step() only once after the last training call
+        self.train_sampling_call_difference = 0
+
     def initialize(self, mode='server'):
         """
         mode: ['server', 'experiment'] - if mode==server, don't use dimension reduction and function in visualization
@@ -368,15 +374,21 @@ class NeuralImportanceSampling:
         return masks
 
     def get_samples(self, context):
+        self.train_sampling_call_difference += 1
         return self.integrator.sample_with_context(context, jacobian=True)
 
     def train(self, context):
-        train_result = self.integrator.train_with_context(context=context, lr=False, integral=True, points=True)
+        self.train_sampling_call_difference -= 1
+        train_result = self.integrator.train_with_context(context=context, lr=False, integral=True, points=True,
+                                                          batch_size=self.config.batch_size,
+                                                          apply_optimizer=not self.config.gradient_accumulation)
         for epoch_result in train_result:
             if self.visualize_object:
                 self.visualize_train_step(epoch_result)
             if self.config.use_tensorboard:
                 self.log_tensorboard_train_step(epoch_result)
+        if self.config.gradient_accumulation and self.train_sampling_call_difference == 0:
+            self.integrator.apply_optimizer()
         return train_result
 
     def visualize_train_step(self, train_result):

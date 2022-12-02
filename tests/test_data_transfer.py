@@ -52,8 +52,3 @@ def client_process_func():
     assert np.array_equal(from_server, TEST_DATA), "Data from client differs"
 
 
-def init_client_server():
-    server = TrainServer(ExperimentConfig())
-    client = Client()
-    return client, server
-
