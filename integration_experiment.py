@@ -511,7 +511,7 @@ if __name__ == '__main__':
     config = pyhocon_wrapper.parse_file(options.config)
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
 
-    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
     server_processing(experiment_config)
 
     #experiment_config.num_context_features = 0
