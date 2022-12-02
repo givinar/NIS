@@ -224,8 +224,7 @@ def cos_weight(s: np.ndarray, n: np.ndarray, e=1.):
     # Return the result
     return light, pdf
 
-def uniform():
-    eps = np.random.uniform(0., 1., 2)
+def uniform(eps: np.ndarray):
     eps[0] = math.acos(eps[0])
     eps[1] *= 2 * math.pi
     pdf = 1 / (2 * np.pi)
@@ -240,10 +239,9 @@ def get_test_samples(points: np.ndarray):
 
     for i in range(norm_pts.shape[0]):
         s = np.random.uniform(0., 1., 2)
-        norm_p = norm_pts[i]
         norm = np.array([0, 1, 0])
         [light, pdf] = cos_weight(s, norm)
-        #[light, pdf] = uniform()
+        #[light, pdf] = uniform(s)
         lights[i] = light
         pdfs[i] = pdf
     return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]
