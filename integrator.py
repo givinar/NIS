@@ -233,7 +233,7 @@ class Integrator():
             # Backprop #
             #loss = self.loss_func(y, absdet)
             loss = mean
-
+            loss.backward()
             #print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------
 
