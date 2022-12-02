@@ -135,11 +135,6 @@ class TrainServer:
         self.nis = NeuralImportanceSampling(_config)
         self.hybrid_sampling = self.config.hybrid_sampling
 
-        self.counter = 0
-        self.infer_counter = 0
-        self.acc_pdf_o = 0
-        self.acc_pdf_t = 0
-
     def connect(self):
         print(f"Waiting for connection by {self.host}")
         self.connection, address = self.sock.accept()
@@ -177,19 +172,8 @@ class TrainServer:
             samples[:, 1] = samples[:, 1] * 2 * math.pi
             pdfs /= 2 * math.pi
 
-
-        #l = np.linalg.norm(norm_samples, axis=-1)
-        #v = np.abs(l - 1)
-        #res = np.all(v <= np.finfo(np.float32).eps)
-        #if not res:
-        #    logging.warning("Vector not equ 1")
-
-        #print("s1 = ", samples[0, :].numpy(), "s2 = ", samples[1, :].numpy(), "s_end = ", samples[-1, :].numpy())
-        #print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy(), "pdf_end = ", pdfs[-1].numpy())
-        #self.infer_counter += 1
-        #self.acc_pdf_o += pdfs[0].numpy()
-        #self.acc_pdf_t += pdfs[1].numpy()
-        #print("Integral pdf1 = ", self.acc_pdf_o/self.infer_counter, "Integral pdf1 = ", self.acc_pdf_t/self.infer_counter)
+        logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
+        logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
 
         return [samples, pdfs]  # lights, pdfs
 
@@ -206,10 +190,8 @@ class TrainServer:
 
     def process(self):
         try:
-            self.counter += 1
-            #print("Iteration: ", self.counter)
             logging.debug('Mode = %s', self.mode.name)
-            #logging.debug('Len = %s, Data = %s', self.length, np.frombuffer(self.raw_data, dtype=np.float32))
+            logging.debug('Len = %s, Data = %s', self.length, np.frombuffer(self.raw_data, dtype=np.float32))
             if self.mode == Mode.TRAIN:
                 self.make_train()
                 self.connection.send(self.data_ok.name)
@@ -529,10 +511,8 @@ if __name__ == '__main__':
     config = pyhocon_wrapper.parse_file(options.config)
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
 
-    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
+    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
     server_processing(experiment_config)
-    #server = threading.Thread(target=server_processing, args=(experiment_config,))
-    #server.start()
 
     #experiment_config.num_context_features = 0
     #nis = NeuralImportanceSampling(experiment_config)
