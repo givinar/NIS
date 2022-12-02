@@ -191,11 +191,17 @@ def ortho_vector(n: np.ndarray):
 
     return p
 
+def cartesian_to_spherical(vec: np.ndarray):
+    phi = math.atan2(vec[2], vec[0])
+    if phi < 0:
+        phi += 2 * math.pi
+    theta = math.acos(vec[1])
+    return np.array([theta, phi])
 
 # Maps sample in the unit square onto a hemisphere,
 # defined by a normal vector with a cosine-weighted distribution
 # with power e.
-def map_to_hemisphere(s: np.ndarray, n: np.ndarray, e=1.):
+def cos_weight(s: np.ndarray, n: np.ndarray, e=1.):
     #Construct basis
     u = ortho_vector(n)
     v = np.cross(u, n)
@@ -213,16 +219,17 @@ def map_to_hemisphere(s: np.ndarray, n: np.ndarray, e=1.):
 
     vec = u * sin_theta * cos_psi + v * sin_theta * sin_psi + n * cos_theta
     norm_vec = vec / np.linalg.norm(vec)
+    pdf = norm_vec[1] / np.pi
+    light = cartesian_to_spherical(norm_vec)
     # Return the result
-    return norm_vec
+    return light, pdf
 
-def cartesian_to_spherical(vec: np.ndarray):
-    phi = math.atan2(vec[2], vec[0])
-    if phi < 0:
-        phi += 2 * math.pi
-    theta = math.acos(vec[1])
-    return np.array([theta, phi])
-
+def uniform():
+    eps = np.random.uniform(0., 1., 2)
+    eps[0] = math.acos(eps[0])
+    eps[1] *= 2 * math.pi
+    pdf = 1 / (2 * np.pi)
+    return eps, pdf
 
 # Getting samples similar to HIBRID
 def get_test_samples(points: np.ndarray):
@@ -235,8 +242,8 @@ def get_test_samples(points: np.ndarray):
         s = np.random.uniform(0., 1., 2)
         norm_p = norm_pts[i]
         norm = np.array([0, 1, 0])
-        light = map_to_hemisphere(s, norm)
-        pdfs[i] = light[1] / np.pi
-        light = cartesian_to_spherical(light)
+        [light, pdf] = cos_weight(s, norm)
+        #[light, pdf] = uniform()
         lights[i] = light
+        pdfs[i] = pdf
     return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]

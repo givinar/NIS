@@ -68,17 +68,17 @@ class Integrator():
         #absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
         y = self._func(x)
         y = y + np.finfo(np.float32).eps
-        log_y = torch.log(y)
-        log_absdet = torch.log(absdet)
-        mean = torch.mean(-log_absdet - log_y)
-        var = torch.var(y * absdet)
-        #mean = torch.mean(y*absdet)
-        #var = torch.var(y*absdet)
-        #y = (y/mean).detach()
+        #log_y = torch.log(y)
+        #log_absdet = torch.log(absdet)
+        #mean = torch.mean(-log_absdet - log_y)
+        #var = torch.var(y * absdet)
+        mean = torch.mean(y/absdet)
+        var = torch.var(y/absdet)
+        y = (y/mean).detach()
 
         # Backprop #
-        #loss = self.loss_func(y,absdet)
-        loss = mean
+        loss = self.loss_func(y,absdet)
+        #loss = mean
         loss.backward()
         self.optimizer.step()
         if self.scheduler is not None:

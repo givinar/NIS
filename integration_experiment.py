@@ -170,10 +170,9 @@ class TrainServer:
             [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
         else:
             [samples, pdfs] = self.nis.get_samples(points)
-            samples[:, 0] = samples[:, 0] * math.pi / 2
+            samples[:, 0] = torch.acos(samples[:, 0])
             samples[:, 1] = samples[:, 1] * 2 * math.pi
             pdfs /= 2 * math.pi
-            #samples = torch.nn.functional.normalize(samples)
 
 
         #l = np.linalg.norm(norm_samples, axis=-1)
@@ -183,11 +182,11 @@ class TrainServer:
         #    logging.warning("Vector not equ 1")
 
         #print("s1 = ", samples[0, :].numpy(), "s2 = ", samples[1, :].numpy(), "s_end = ", samples[-1, :].numpy())
-        print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy(), "pdf_end = ", pdfs[-1].numpy())
-        self.infer_counter += 1
-        self.acc_pdf_o += pdfs[0].numpy()
-        self.acc_pdf_t += pdfs[1].numpy()
-        print("Integral pdf1 = ", self.acc_pdf_o/self.infer_counter, "Integral pdf1 = ", self.acc_pdf_t/self.infer_counter)
+        #print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy(), "pdf_end = ", pdfs[-1].numpy())
+        #self.infer_counter += 1
+        #self.acc_pdf_o += pdfs[0].numpy()
+        #self.acc_pdf_t += pdfs[1].numpy()
+        #print("Integral pdf1 = ", self.acc_pdf_o/self.infer_counter, "Integral pdf1 = ", self.acc_pdf_t/self.infer_counter)
 
         return [samples, pdfs]  # lights, pdfs
 
