@@ -7,7 +7,6 @@ from typing import Union
 
 import numpy as np
 import torch
-import math
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
@@ -169,8 +168,8 @@ class TrainServer:
         else:
             [samples, pdfs] = self.nis.get_samples(points)
             samples[:, 0] = torch.acos(samples[:, 0])
-            samples[:, 1] = samples[:, 1] * 2 * math.pi
-            pdfs /= 2 * math.pi
+            samples[:, 1] = samples[:, 1] * 2 * np.pi
+            pdfs /= 2 * np.pi
 
         logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
         logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
