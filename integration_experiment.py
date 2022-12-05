@@ -164,7 +164,7 @@ class TrainServer:
     def make_infer(self):
         points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features))
         if self.hybrid_sampling:
-            [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
+            [samples, pdfs] = utils.get_test_samples_vectorized(points)  # lights(vec3), pdfs
         else:
             [samples, pdfs] = self.nis.get_samples(points)
             samples[:, 0] = torch.acos(samples[:, 0])
