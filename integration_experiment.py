@@ -162,7 +162,7 @@ class TrainServer:
             logging.error(f"Client was disconnected suddenly while sending\n")
 
     def make_infer(self):
-        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features))
+        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3)) #add vec3 light_sample_dir
         if self.hybrid_sampling:
             [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
         else:
@@ -356,7 +356,8 @@ class NeuralImportanceSampling:
 
     def get_samples(self, context):
         self.train_sampling_call_difference += 1
-        return self.integrator.sample_with_context(context, jacobian=True)
+        light_sample_dir = context[:, 6:]
+        return self.integrator.sample_with_context(context[:, :6], jacobian=True) #x,y,z, norm_x, norm_y, norm_z
 
     def train(self, context):
         self.train_sampling_call_difference -= 1

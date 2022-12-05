@@ -29,7 +29,7 @@ class Client:
         self.length = 0
 
         # Just for tests
-        self.ndims = 3
+        self.ndims = 2
         self.funcname = 'Gaussian'
         self.function: functions.Function = getattr(functions, self.funcname)(n=self.ndims)
 
@@ -57,12 +57,13 @@ class Client:
 
     def get_samples(self):
         print("----> Infer")
-        points = np.random.random((self.num_points, 9)).astype(np.float32)  # pos_x, pos_y, pos_z, norm_x, norm_y, norm_z, dir_x, dir_y, dir_z
-                                                                            # dir_? right now is not taken into account right now
-        self.client_socket.send(len(points[:, [0, 1, 2, 3, 4, 5]].tobytes()).to_bytes(4, 'little'))  # bytes
+        points = np.random.random((self.num_points, 12)).astype(np.float32)  # pos_x, pos_y, pos_z, norm_x, norm_y, norm_z, dir_x, dir_y, dir_z
+                                                                             # light_sample_dir_x, light_sample_dir_y, light_sample_dir_z
+                                                                            # dir_? is not taken into account right now
+        self.client_socket.send(len(points[:, [0, 1, 2, 3, 4, 5, 9, 10, 11]].tobytes()).to_bytes(4, 'little'))  # bytes
 
         raw_data = bytearray()
-        raw_data.extend(points[:, [0, 1, 2, 3, 4, 5]].tobytes())
+        raw_data.extend(points[:, [0, 1, 2, 3, 4, 5, 9, 10, 11]].tobytes())
         self.client_socket.send(raw_data)
 
         data = self.client_socket.recv(self.put_infer.length)
@@ -79,7 +80,7 @@ class Client:
 
     def send_radiance(self):
         print("----> Train")
-        t_data = torch.tensor(self.points_data[:, [9, 10, 11]]) # s1, s2, s3
+        t_data = torch.tensor(self.points_data[:, [9, 10]]) # s1, s2
         t_y = self.function(t_data)
         y = t_y.cpu().detach().numpy()
         lum = np.stack((y,) * 3, axis=-1)
