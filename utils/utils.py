@@ -233,7 +233,7 @@ def uniform(eps: np.ndarray):
 def spherical_to_cartesian(lights: np.ndarray):
     light_sample_dir_phi = lights[:, 0]
     light_sample_dir_theta = lights[:, 1]
-    y = np.sin(light_sample_dir_theta) * np.cos(light_sample_dir_phi)
+    y = np.cos(light_sample_dir_theta)
     return y
 
 def get_pdf_by_samples(lights: np.ndarray):
