@@ -238,7 +238,7 @@ def spherical_to_cartesian(lights: np.ndarray):
 
 def get_pdf_by_samples(lights: np.ndarray):
     y = spherical_to_cartesian(lights)
-    return y / np.pi
+    return torch.from_numpy(y / np.pi)
 
 # Getting samples similar to HIBRID
 def get_test_samples(points: np.ndarray):
