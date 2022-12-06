@@ -16,6 +16,7 @@ train
   num_hidden_dims = 128
   num_coupling_layers = 3
   num_hidden_layers = 5
+  network_type = 'unet' # ['mlp', 'unet']
   num_blob_bins = 0
   num_piecewise_bins = 5
   loss = MSE
