@@ -172,7 +172,7 @@ class Integrator():
 
         return (y/absdet).to('cpu')
 
-    def sample_with_context(self, context: np.ndarray, jacobian: bool = False):
+    def sample_with_context(self, context: np.ndarray, inverse: bool = False):
         """
         Sample from the trained distribution with context for transform network.
 
@@ -184,14 +184,17 @@ class Integrator():
             tf.tensor of size (context.shape[0], ndim) of sampled points, and jacobian(optional).
 
         """
-        z = self.dist.sample((context.shape[0],)).to(self.device)
-        list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context)))
-        with torch.no_grad():
-            x, absdet = self.flow(z, context=torch.tensor(context).to(self.device))
-        if jacobian:
-            return (x.to('cpu'), absdet.to('cpu'))
+        if inverse:
+            z = torch.tensor(context[:, 8:]).to(self.device)
+            with torch.no_grad():
+                x, absdet = self.flow.inverse(z, context=torch.tensor(context[:, :8]).to(self.device))
+            return absdet.to('cpu')
         else:
-            return x.to('cpu')
+            z = self.dist.sample((context.shape[0],)).to(self.device)
+            list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context[:, :8])))
+            with torch.no_grad():
+                x, absdet = self.flow(z, context=torch.tensor(context[:, :8]).to(self.device))
+            return (x.to('cpu'), absdet.to('cpu'))
 
     def train_with_context(self, context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
                            apply_optimizer=True) -> list:

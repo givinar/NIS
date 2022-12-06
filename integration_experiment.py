@@ -162,27 +162,29 @@ class TrainServer:
             logging.error(f"Client was disconnected suddenly while sending\n")
 
     def make_infer(self):
-        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3)) #add vec3 light_sample_dir
+        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
         if self.hybrid_sampling:
+            pdf_light_samples = get_pdf_by_samples(points[:, 8:])
             [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
         else:
-            [samples, pdfs] = self.nis.get_samples(points)
-            samples[:, 0] = torch.acos(samples[:, 0])
-            samples[:, 1] = samples[:, 1] * 2 * np.pi
-            pdfs /= 2 * np.pi
+            [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
+            samples[:, 0] = samples[:, 0] * 2 * np.pi
+            samples[:, 1] = torch.acos(samples[:, 1])
+            pdf_light_samples = pdf_light_samples / (2 * np.pi)
+            pdfs = (1 / (2 * np.pi )) / pdfs
 
         logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
         logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
 
-        return [samples, pdfs]  # lights, pdfs
+        return [samples, pdf_light_samples, pdfs]  # lights, pdfs
 
     def make_train(self):
-        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3 + 3))
+        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3))
         if self.hybrid_sampling:
             pass
         else:
             lum = context[:, 0] + context[:, 1] + context[:, 2]
-            tdata = context[:, [3, 4, 5, 6, 7, 8]]
+            tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
             tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1,
                                    dtype=np.float32)
             train_result = self.nis.train(context=tdata)
@@ -195,14 +197,14 @@ class TrainServer:
                 self.make_train()
                 self.connection.send(self.data_ok.name)
             elif self.mode == Mode.INFERENCE:
-                [samples, pdfs] = self.make_infer()
+                [samples, pdf_light_samples, pdfs] = self.make_infer()
                 self.connection.send(self.put_infer.name)
                 answer = self.connection.recv(self.put_infer_ok.length)
                 if answer == self.put_infer_ok.name:
                     raw_data = bytearray()
                     s = samples.cpu().detach().numpy()
-                    z = torch.zeros(s.shape[0])
-                    s = np.concatenate((s, z.reshape([len(z), 1])), axis=1, dtype=np.float32)
+                    pls = pdf_light_samples.cpu().detach().numpy()
+                    s = np.concatenate((s, pls.reshape([len(pls), 1])), axis=1, dtype=np.float32)
                     p = pdfs.cpu().detach().numpy().reshape([-1, 1])
                     raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
                     self.connection.send(len(raw_data).to_bytes(4, 'little'))
@@ -356,8 +358,9 @@ class NeuralImportanceSampling:
 
     def get_samples(self, context):
         self.train_sampling_call_difference += 1
-        light_sample_dir = context[:, 6:]
-        return self.integrator.sample_with_context(context[:, :6], jacobian=True) #x,y,z, norm_x, norm_y, norm_z
+        pdf_light_sample = self.integrator.sample_with_context(context, inverse=True)
+        [samples, pdf] = self.integrator.sample_with_context(context, inverse=False)
+        return [samples, pdf_light_sample, pdf]
 
     def train(self, context):
         self.train_sampling_call_difference -= 1

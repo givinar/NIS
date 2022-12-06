@@ -230,6 +230,16 @@ def uniform(eps: np.ndarray):
     pdf = 1 / (2 * np.pi)
     return eps, pdf
 
+def spherical_to_cartesian(lights: np.ndarray):
+    light_sample_dir_phi = lights[:, 0]
+    light_sample_dir_theta = lights[:, 1]
+    y = np.sin(light_sample_dir_theta) * np.cos(light_sample_dir_phi)
+    return y
+
+def get_pdf_by_samples(lights: np.ndarray):
+    y = spherical_to_cartesian(lights)
+    return y / np.pi
+
 # Getting samples similar to HIBRID
 def get_test_samples(points: np.ndarray):
 
