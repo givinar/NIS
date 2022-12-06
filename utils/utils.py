@@ -191,11 +191,37 @@ def ortho_vector(n: np.ndarray):
 
     return p
 
+def ortho_vector_vectorized(n: np.ndarray):
+    p = np.tile(np.array([0, 0, 0], float), (n.shape[0], 1))
+    if math.fabs(n[0, 2]) > 0.0:
+        k = np.sqrt(n[:, 1] * n[:, 1] + n[:, 2] * n[:, 2])
+        p[:, 0] = 0
+        p[:, 1] = -n[:, 2] / k
+        p[:, 2] = n[:, 1] / k
+    else:
+        k = np.sqrt(n[:, 0] * n[:, 0] + n[:, 1] * n[:, 1])
+        p[:, 0] = n[:, 1] / k
+        p[:, 1] = -n[:, 0] / k
+        p[:, 2] = 0
+    return p
+
+def cartesian_to_spherical(vec: np.ndarray):
+    phi = math.atan2(vec[2], vec[0])
+    if phi < 0:
+        phi += 2 * math.pi
+    theta = math.acos(vec[1])
+    return np.array([theta, phi])
+
+def cartesian_to_spherical_vectorized(vec: np.ndarray):
+    phi = np.arctan2(vec[:, 2], vec[:, 0])
+    phi = np.array(list(map(lambda t: t + 2 * np.pi if t < 0 else t, phi)))
+    theta = np.arccos(vec[:, 1])
+    return np.vstack([theta, phi]).T
 
 # Maps sample in the unit square onto a hemisphere,
 # defined by a normal vector with a cosine-weighted distribution
 # with power e.
-def map_to_hemisphere(s: np.ndarray, n: np.ndarray, e=1.):
+def cos_weight(s: np.ndarray, n: np.ndarray, e=1.):
     #Construct basis
     u = ortho_vector(n)
     v = np.cross(u, n)
@@ -213,21 +239,64 @@ def map_to_hemisphere(s: np.ndarray, n: np.ndarray, e=1.):
 
     vec = u * sin_theta * cos_psi + v * sin_theta * sin_psi + n * cos_theta
     norm_vec = vec / np.linalg.norm(vec)
+    pdf = norm_vec[1] / np.pi
+    light = cartesian_to_spherical(norm_vec)
     # Return the result
-    return norm_vec
+    return light, pdf
 
+def cos_weight_vectorized(s: np.ndarray, n: np.ndarray, e=1.):
+    #Construct basis
+    u = ortho_vector_vectorized(n)
+    v = np.cross(u, n)
+    u = np.cross(n, v)
+
+    # Calculate 2D sample
+    r1 = s[:, 0]
+    r2 = s[:, 1]
+
+    # Transform to spherical coordinates
+    sin_psi = np.sin(2. * np.pi*r1)
+    cos_psi = np.cos(2. * np.pi*r1)
+    cos_theta = np.power(1. - r2, 1. / (e + 1.))
+    sin_theta = np.sqrt(1. - cos_theta * cos_theta)
+
+    vec = u * sin_theta[:, None] * cos_psi[:, None] + \
+          v * sin_theta[:, None] * sin_psi[:, None] + \
+          n * cos_theta[:, None]
+    norm_vec = vec / np.linalg.norm(vec, axis=1)[:, None]
+    pdf = norm_vec[:, 1] / np.pi
+    light = cartesian_to_spherical_vectorized(norm_vec)
+    # Return the result
+    return light, pdf
+
+def uniform(eps: np.ndarray):
+    eps[0] = math.acos(eps[0])
+    eps[1] *= 2 * math.pi
+    pdf = 1 / (2 * np.pi)
+    return eps, pdf
 
 # Getting samples similar to HIBRID
 def get_test_samples(points: np.ndarray):
 
     norm_pts = points[:, 3:]
-    lights = np.zeros(norm_pts.shape, dtype=np.float32)
+    lights = np.zeros([norm_pts.shape[0], 2], dtype=np.float32)
     pdfs = np.zeros(norm_pts.shape[0], dtype=np.float32)
 
     for i in range(norm_pts.shape[0]):
         s = np.random.uniform(0., 1., 2)
-        norm = norm_pts[i]
-        light = map_to_hemisphere(s, norm)
+        norm = np.array([0, 1, 0])
+        [light, pdf] = cos_weight(s, norm)
+        #[light, pdf] = uniform(s)
         lights[i] = light
-        pdfs[i] = np.dot(norm, light) / np.pi
+        pdfs[i] = pdf
+    return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]
+
+
+def get_test_samples_vectorized(points: np.ndarray):
+
+    points = points
+    s = np.random.uniform(0., 1., (points.shape[0], 2))
+    norm = np.tile(np.array([0, 1, 0]), (points.shape[0], 1))
+    [lights, pdfs] = cos_weight_vectorized(s, norm)
+
     return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]

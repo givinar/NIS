@@ -164,18 +164,16 @@ class TrainServer:
     def make_infer(self):
         points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features))
         if self.hybrid_sampling:
-            [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
-            l = np.linalg.norm(samples, axis=-1)
-            v = np.abs(l - 1)
-            res = np.all(v <= np.finfo(np.float32).eps)
-            if not res:
-                logging.warning("Vector not equ 1")
-
+            [samples, pdfs] = utils.get_test_samples_vectorized(points)  # lights(vec3), pdfs
         else:
             [samples, pdfs] = self.nis.get_samples(points)
+            samples[:, 0] = torch.acos(samples[:, 0])
+            samples[:, 1] = samples[:, 1] * 2 * np.pi
+            pdfs /= 2 * np.pi
 
-        print("s1 = ", samples[0, :].numpy(), "s2 = ", samples[1, :].numpy())
-        print("pdf1 = ", pdfs[0].numpy(), "pdf2 = ", pdfs[1].numpy())
+        logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
+        logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
+
         return [samples, pdfs]  # lights, pdfs
 
     def make_train(self):
@@ -203,6 +201,8 @@ class TrainServer:
                 if answer == self.put_infer_ok.name:
                     raw_data = bytearray()
                     s = samples.cpu().detach().numpy()
+                    z = torch.zeros(s.shape[0])
+                    s = np.concatenate((s, z.reshape([len(z), 1])), axis=1, dtype=np.float32)
                     p = pdfs.cpu().detach().numpy().reshape([-1, 1])
                     raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
                     self.connection.send(len(raw_data).to_bytes(4, 'little'))
@@ -314,7 +314,7 @@ class NeuralImportanceSampling:
                                                                         out_shape=[out_features],
                                                                         hidden_sizes=[hidden_dim] * n_hidden_layers,
                                                                         hidden_activation=nn.ReLU(),
-                                                                        output_activation=None)
+                                                                        output_activation=nn.Sigmoid())
         if coupling_name == 'additive':
             return AdditiveCouplingTransform(mask, transform_net_create_fn, blob,
                                              num_context_features=num_context_features)
@@ -512,9 +512,8 @@ if __name__ == '__main__':
 
     logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
     server_processing(experiment_config)
-    #server = threading.Thread(target=server_processing, args=(experiment_config,))
-    #server.start()
 
+    #experiment_config.num_context_features = 0
     #nis = NeuralImportanceSampling(experiment_config)
     #nis.initialize()
     #nis.run_experiment()
