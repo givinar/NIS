@@ -210,7 +210,7 @@ def cartesian_to_spherical(vec: np.ndarray):
     if phi < 0:
         phi += 2 * math.pi
     theta = math.acos(vec[1])
-    return np.array([theta, phi])
+    return np.array([phi, theta])
 
 def cartesian_to_spherical_vectorized(vec: np.ndarray):
     phi = np.arctan2(vec[:, 2], vec[:, 0])
