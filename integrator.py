@@ -186,12 +186,15 @@ class Integrator():
         """
         if inverse:
             z = torch.tensor(context[:, 8:]).to(self.device)
+            z[:, 0] = z[:, 0] / (2 * np.pi) #phi
+            z[:, 1] = np.abs(np.cos(z[:, 1]))       #theta
             with torch.no_grad():
                 x, absdet = self.flow.inverse(z, context=torch.tensor(context[:, :8]).to(self.device))
             return absdet.to('cpu')
         else:
             z = self.dist.sample((context.shape[0],)).to(self.device)
-            list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context[:, :8])))
+            list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context[:, [0,1,2]])))
+            #np.savetxt("foo.csv", context, delimiter=" ")
             with torch.no_grad():
                 x, absdet = self.flow(z, context=torch.tensor(context[:, :8]).to(self.device))
             return (x.to('cpu'), absdet.to('cpu'))
@@ -204,7 +207,18 @@ class Integrator():
 
         # Sample #
         # z = self.dist.sample((context.shape[0],)).to(self.device)
-        z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, :-1]])
+        #counter = 0
+        #for row in context[:, [0,1,2]]:
+        #    try:
+        #        z = torch.stack([self.z_mapper[row.tobytes()]])
+        #    except:
+        #        np.savetxt("foo2.csv", row, delimiter=" ")
+        #        print(counter)
+        #        print(row)
+        #    counter += 1
+        #    print(counter)
+        z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, [0,1,2]]])
+        #z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, :-1]])
         # log_prob = self.dist.log_prob(z)
         # In practice for uniform dist, log_prob = 0 and absdet is multiplied by 1
         # But in the future we might change sampling dist so good to have
