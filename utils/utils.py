@@ -216,7 +216,7 @@ def cartesian_to_spherical_vectorized(vec: np.ndarray):
     phi = np.arctan2(vec[:, 2], vec[:, 0])
     phi = np.array(list(map(lambda t: t + 2 * np.pi if t < 0 else t, phi)))
     theta = np.arccos(vec[:, 1])
-    return np.vstack([theta, phi]).T
+    return np.vstack([phi, theta]).T
 
 # Maps sample in the unit square onto a hemisphere,
 # defined by a normal vector with a cosine-weighted distribution

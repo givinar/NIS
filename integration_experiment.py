@@ -164,8 +164,6 @@ class TrainServer:
     def make_infer(self):
         points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
         if self.hybrid_sampling:
-            print(points[0, 8:], points[1, 8:])
-            print(points.shape)
             pdf_light_samples = utils.get_pdf_by_samples(points[:, 8:])
             [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
             #[samples, pdfs] = utils.get_test_samples_vectorized(points)  # lights(vec3), pdfs
@@ -207,6 +205,7 @@ class TrainServer:
                     raw_data = bytearray()
                     s = samples.cpu().detach().numpy()
                     pls = pdf_light_samples.cpu().detach().numpy()
+                    pls[pls<0] = 0
                     s = np.concatenate((s, pls.reshape([len(pls), 1])), axis=1, dtype=np.float32)
                     p = pdfs.cpu().detach().numpy().reshape([-1, 1])
                     raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
