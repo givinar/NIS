@@ -171,8 +171,11 @@ class TrainServer:
             [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
             samples[:, 0] = samples[:, 0] * 2 * np.pi
             samples[:, 1] = torch.acos(samples[:, 1])
-            pdf_light_samples = pdf_light_samples / (2 * np.pi)
-            pdfs = (1 / (2 * np.pi )) / pdfs
+            #pdf_light_samples = pdf_light_samples / (2 * np.pi)
+            #pdfs = (1 / (2 * np.pi )) / pdfs
+
+            pdfs = pdfs / (2 * np.pi)
+            pdf_light_samples = (1 / (2 * np.pi)) / pdf_light_samples
 
         logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
         logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
