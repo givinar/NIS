@@ -164,19 +164,16 @@ class TrainServer:
     def make_infer(self):
         points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
         if self.hybrid_sampling:
-            #pdf_light_samples = utils.get_pdf_by_samples(points[:, 8:])
-            #[samples, pdfs] = utils.get_test_samples_vectorized(points)  # lights(vec3), pdfs
-            pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
-            [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
+            pdf_light_samples = utils.get_pdf_by_samples(points[:, 8:])
+            [samples, pdfs] = utils.get_test_samples_vectorized(points)  # lights(vec3), pdfs
+            #pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
+            #[samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
         else:
             [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
             samples[:, 0] = samples[:, 0] * 2 * np.pi
             samples[:, 1] = torch.acos(samples[:, 1])
-            #pdf_light_samples = pdf_light_samples / (2 * np.pi)
-            #pdfs = (1 / (2 * np.pi )) / pdfs
-
-            pdfs = pdfs / (2 * np.pi)
-            pdf_light_samples = (1 / (2 * np.pi)) / pdf_light_samples
+            pdf_light_samples = pdf_light_samples / (2 * np.pi)
+            pdfs = (1 / (2 * np.pi )) / pdfs
 
         logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
         logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
@@ -188,7 +185,7 @@ class TrainServer:
         if self.hybrid_sampling:
             pass
         else:
-            lum = context[:, 0] + context[:, 1] + context[:, 2]
+            lum = 0.2126 * context[:, 0] + 0.7152 * context[:, 1] + 0.0722 * context[:, 2]
             tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
             tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1,
                                    dtype=np.float32)
