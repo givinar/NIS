@@ -13,13 +13,12 @@ from SSIM_PIL import compare_ssim
 """
 Module compares two sequences of images from two different folders with ground truth image
 using specified metric and shows its in the plot.
-Example: -im1 'image_folder1_path' -im2 'image_folder2_path' -gt 'ground_truth_image_path' -s 50
+Example: -im 'image_folder_path' -gt 'ground_truth_image_path' -s 50
 """
 
 @dataclass
 class ImageCompare:
-    img_folder1: str
-    img_folder2: str
+    img_folder: str
     gt_image: str
     step: int
 
@@ -32,8 +31,7 @@ class ImageCompare:
         arg_parser = argparse.ArgumentParser(
             description='Comparing images by specific metric')
 
-        arg_parser.add_argument('-im1', '--image_folder1', type=str, required=True, help='First image folder path'),
-        arg_parser.add_argument('-im2', '--image_folder2', type=str, required=True, help='Second image folder path')
+        arg_parser.add_argument('-im', '--image_folder', type=str, required=True, help='Image folder path'),
         arg_parser.add_argument('-gt', '--image_gt', type=str, required=True, help='Ground truth image path')
         arg_parser.add_argument('-s', '--step', type=int, required=True, help='Iteration step')
 
@@ -90,20 +88,21 @@ class ImageCompare:
         return indices, ssims
 
     def show_plot(self):
-        length1 = len(os.listdir(self.img_folder1))
-        length2 = len(os.listdir(self.img_folder2))
-        indices1, ssims1 = self.get_ssim(self.img_folder1, length1, compare_ssim)
-        indices2, ssims2 = self.get_ssim(self.img_folder2, length2, compare_ssim)
+        colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+        plt.figure('SSIM')
+        try:
+            for i, folder in enumerate(os.listdir(self.img_folder)):
+                full_path = os.path.join(self.img_folder, folder)
+                length = len(os.listdir(full_path))
+                indices, ssims = self.get_ssim(full_path, length, compare_ssim)
+                plt.plot(indices, ssims, colors[i], label=os.path.basename(full_path))
+        except IndexError:
+            print('Color index error, extend color list...')
+            raise SystemExit
 
-        msg = str()
-        if indices1.shape[0] != indices2.shape[0]:
-            msg = ', Warning: Numbers of images in folders are different ...'
-
-        plt.figure('SSIM' + msg)
-        plt.plot(indices1, ssims1, 'r-', label=os.path.basename(self.img_folder1))
-        plt.plot(indices2, ssims2, 'b--', label=os.path.basename(self.img_folder2))
         plt.xlabel('Iterations')
         plt.ylabel('SSIM')
+        #plt.ylim(0., 1.)
         plt.grid()
         plt.legend()
         plt.show()
@@ -112,8 +111,7 @@ class ImageCompare:
 if __name__ == '__main__':
     options = ImageCompare.parse_args()
 
-    ic = ImageCompare(options.image_folder1,
-                      options.image_folder2,
+    ic = ImageCompare(options.image_folder,
                       options.image_gt,
                       options.step)
     ic.show_plot()
