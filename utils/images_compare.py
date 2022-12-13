@@ -16,7 +16,11 @@ from typing import Tuple
 """
 Module compares two sequences of images from two different folders with ground truth image
 using specified metric and shows its in the plot.
-Example: -im 'image_folder_path' -gt 'ground_truth_image_path' -s 50
+Example: -im 'image_folder_path' -gt 'ground_truth_image_path' -m SSIM -s 50
+
+Supported metrics:
+- SSIM
+- MAPE
 """
 
 
