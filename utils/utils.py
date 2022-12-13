@@ -272,10 +272,14 @@ def cos_weight_vectorized(s: np.ndarray, n: np.ndarray, e=1.):
     return light, pdf
 
 def uniform(eps: np.ndarray):
-    eps[0] = math.acos(eps[0])
-    eps[1] *= 2 * math.pi
+    eps[0] *= 2 * math.pi
+    eps[1] = math.acos(eps[1])
     pdf = 1 / (2 * np.pi)
     return eps, pdf
+
+def get_pdf_by_samples_uniform(lights: np.ndarray):
+    y = np.ones(lights.shape[0])
+    return torch.from_numpy(y / (2 * np.pi))
 
 def spherical_to_cartesian(lights: np.ndarray):
     light_sample_dir_phi = lights[:, 0]
@@ -297,15 +301,14 @@ def get_test_samples(points: np.ndarray):
     for i in range(norm_pts.shape[0]):
         s = np.random.uniform(0., 1., 2)
         norm = np.array([0, 1, 0])
-        [light, pdf] = cos_weight(s, norm)
-        #[light, pdf] = uniform(s)
+        #[light, pdf] = cos_weight(s, norm)
+        [light, pdf] = uniform(s)
         lights[i] = light
         pdfs[i] = pdf
     return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]
 
 
 def get_test_samples_vectorized(points: np.ndarray):
-
     points = points
     s = np.random.uniform(0., 1., (points.shape[0], 2))
     norm = np.tile(np.array([0, 1, 0]), (points.shape[0], 1))
