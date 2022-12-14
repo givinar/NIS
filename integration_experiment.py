@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import sys
 from dataclasses import dataclass, asdict
@@ -164,16 +165,17 @@ class TrainServer:
     def make_infer(self):
         points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
         if self.hybrid_sampling:
-            pdf_light_samples = utils.get_pdf_by_samples(points[:, 8:])
-            [samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
+            pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
+            [samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
             #pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
-            #[samples, pdfs] = utils.get_test_samples(points)  # lights(vec3), pdfs
+            #[samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
             [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
+
             samples[:, 0] = samples[:, 0] * 2 * np.pi
             samples[:, 1] = torch.acos(samples[:, 1])
+            pdfs = (1 / (2 * np.pi)) / pdfs
             pdf_light_samples = pdf_light_samples / (2 * np.pi)
-            pdfs = (1 / (2 * np.pi )) / pdfs
 
         logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
         logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
@@ -319,7 +321,7 @@ class NeuralImportanceSampling:
                                                                         out_shape=[out_features],
                                                                         hidden_sizes=[hidden_dim] * n_hidden_layers,
                                                                         hidden_activation=nn.ReLU(),
-                                                                        output_activation=nn.Sigmoid())
+                                                                        output_activation=None)
         if coupling_name == 'additive':
             return AdditiveCouplingTransform(mask, transform_net_create_fn, blob,
                                              num_context_features=num_context_features)
@@ -518,9 +520,9 @@ if __name__ == '__main__':
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
 
     logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
-    server_processing(experiment_config)
+    #server_processing(experiment_config)
 
-    #experiment_config.num_context_features = 0
-    #nis = NeuralImportanceSampling(experiment_config)
-    #nis.initialize()
-    #nis.run_experiment()
+    experiment_config.num_context_features = 0
+    nis = NeuralImportanceSampling(experiment_config)
+    nis.initialize()
+    nis.run_experiment()

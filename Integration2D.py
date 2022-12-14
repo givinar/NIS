@@ -85,15 +85,15 @@ class Integration2D:
         self.func_out = self.function(grid).reshape(100,100)
 
         #----- Additive Model -----#
-#        additiveFlow = self.create_flow('additive')
-#        additiveOptimizer = torch.optim.Adam(additiveFlow.parameters(), lr=self.lr)
-#        additiveScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(additiveOptimizer, self.epochs, lr_min)
-#        self.additiveIntegrator = Integrator(func        = self.function,
-#                                             flow        = additiveFlow,
-#                                             dist        = self.dist,
-#                                             optimizer   = additiveOptimizer,
-#                                             scheduler   = additiveScheduler,
-#                                             loss_func   = self.loss_func)
+        additiveFlow = self.create_flow('additive')
+        additiveOptimizer = torch.optim.Adam(additiveFlow.parameters(), lr=self.lr)
+        additiveScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(additiveOptimizer, self.epochs, lr_min)
+        self.additiveIntegrator = Integrator(func        = self.function,
+                                             flow        = additiveFlow,
+                                             dist        = self.dist,
+                                             optimizer   = additiveOptimizer,
+                                             scheduler   = additiveScheduler,
+                                             loss_func   = self.loss_func)
         #----- Affine Model -----#
         affineFlow = self.create_flow('affine')
         affineOptimizer = torch.optim.Adam(affineFlow.parameters(), lr=self.lr)
@@ -105,43 +105,43 @@ class Integration2D:
                                            scheduler   = affineScheduler,
                                            loss_func   = self.loss_func)
         #----- Piecewise Linear Model -----#
-#        piecewiseLinearFlow = self.create_flow('piecewiseLinear')
-#        piecewiseLinearOptimizer = torch.optim.Adam(piecewiseLinearFlow.parameters(), lr=self.lr)
-#        piecewiseLinearScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(piecewiseLinearOptimizer, self.epochs, lr_min)
-#        self.piecewiseLinearIntegrator = Integrator(func        = self.function,
-#                                                    flow        = piecewiseLinearFlow,
-#                                                    dist        = self.dist,
-#                                                    optimizer   = piecewiseLinearOptimizer,
-#                                                    scheduler   = piecewiseLinearScheduler,
-#                                                    loss_func   = self.loss_func)
+        piecewiseLinearFlow = self.create_flow('piecewiseLinear')
+        piecewiseLinearOptimizer = torch.optim.Adam(piecewiseLinearFlow.parameters(), lr=self.lr)
+        piecewiseLinearScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(piecewiseLinearOptimizer, self.epochs, lr_min)
+        self.piecewiseLinearIntegrator = Integrator(func        = self.function,
+                                                    flow        = piecewiseLinearFlow,
+                                                    dist        = self.dist,
+                                                    optimizer   = piecewiseLinearOptimizer,
+                                                    scheduler   = piecewiseLinearScheduler,
+                                                    loss_func   = self.loss_func)
         #----- Piecewise Quadratic Model -----#
-#        piecewiseQuadraticFlow = self.create_flow('piecewiseQuadratic')
-#        piecewiseQuadraticOptimizer = torch.optim.Adam(piecewiseQuadraticFlow.parameters(), lr=self.lr)
-#        piecewiseQuadraticScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(piecewiseQuadraticOptimizer, self.epochs, lr_min)
-#        self.piecewiseQuadraticIntegrator = Integrator(func        = self.function,
-#                                                       flow        = piecewiseQuadraticFlow,
-#                                                       dist        = self.dist,
-#                                                       optimizer   = piecewiseQuadraticOptimizer,
-#                                                       scheduler   = piecewiseQuadraticScheduler,
-#                                                       loss_func   = self.loss_func)
+        piecewiseQuadraticFlow = self.create_flow('piecewiseQuadratic')
+        piecewiseQuadraticOptimizer = torch.optim.Adam(piecewiseQuadraticFlow.parameters(), lr=self.lr)
+        piecewiseQuadraticScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(piecewiseQuadraticOptimizer, self.epochs, lr_min)
+        self.piecewiseQuadraticIntegrator = Integrator(func        = self.function,
+                                                       flow        = piecewiseQuadraticFlow,
+                                                       dist        = self.dist,
+                                                       optimizer   = piecewiseQuadraticOptimizer,
+                                                       scheduler   = piecewiseQuadraticScheduler,
+                                                       loss_func   = self.loss_func)
         #----- Piecewise Cubic Model -----#
-#        piecewiseCubicFlow = self.create_flow('piecewiseCubic')
-#        piecewiseCubicOptimizer = torch.optim.Adam(piecewiseCubicFlow.parameters(), lr=self.lr)
-#        piecewiseCubicScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(piecewiseCubicOptimizer, self.epochs, lr_min)
-#        self.piecewiseCubicIntegrator = Integrator(func        = self.function,
-#                                                   flow        = piecewiseCubicFlow,
-#                                                   dist        = self.dist,
-#                                                   optimizer   = piecewiseCubicOptimizer,
-#                                                   scheduler   = piecewiseCubicScheduler,
-#                                                   loss_func   = self.loss_func)
+        piecewiseCubicFlow = self.create_flow('piecewiseCubic')
+        piecewiseCubicOptimizer = torch.optim.Adam(piecewiseCubicFlow.parameters(), lr=self.lr)
+        piecewiseCubicScheduler = torch.optim.lr_scheduler.CosineAnnealingLR(piecewiseCubicOptimizer, self.epochs, lr_min)
+        self.piecewiseCubicIntegrator = Integrator(func        = self.function,
+                                                   flow        = piecewiseCubicFlow,
+                                                   dist        = self.dist,
+                                                   optimizer   = piecewiseCubicOptimizer,
+                                                   scheduler   = piecewiseCubicScheduler,
+                                                   loss_func   = self.loss_func)
 
         #---- Dictioniary -----#
         self.integrator_dict = {'Uniform'               : None,
-                                #'Additive'             : self.additiveIntegrator,
-                                'Affine'               : self.affineIntegrator}
-                                #'Piecewise Linear'     : self.piecewiseLinearIntegrator,
-                                #'Piecewise Quadratic'  : self.piecewiseQuadraticIntegrator,
-                                #'Piecewise Cubic'      : self.piecewiseCubicIntegrator}
+                                'Additive'             : self.additiveIntegrator,
+                                'Affine'               : self.affineIntegrator,
+                                'Piecewise Linear'     : self.piecewiseLinearIntegrator,
+                                'Piecewise Quadratic'  : self.piecewiseQuadraticIntegrator,
+                                'Piecewise Cubic'      : self.piecewiseCubicIntegrator}
 
         self.means = {k:[] for k in self.integrator_dict.keys()}
         self.errors = {k:[] for k in self.integrator_dict.keys()}
