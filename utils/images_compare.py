@@ -118,9 +118,10 @@ class ImageCompare:
         try:
             for i, folder in enumerate(os.listdir(self.img_folder)):
                 full_path = os.path.join(self.img_folder, folder)
-                length = len(os.listdir(full_path))
-                indices, ssims = self.calc_metric(full_path, length, self.metric)
-                plt.plot(indices, ssims, colors[i], label=os.path.basename(full_path))
+                if os.path.isdir(full_path):
+                    length = len(os.listdir(full_path))
+                    indices, ssims = self.calc_metric(full_path, length, self.metric)
+                    plt.plot(indices, ssims, colors[i], label=os.path.basename(full_path))
         except IndexError:
             print('Color index error, extend color list...')
             raise SystemExit
