@@ -69,17 +69,17 @@ class Integrator():
         #absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
         y = self._func(x)
         y = y + np.finfo(np.float32).eps
-        #log_y = torch.log(y)
-        #log_absdet = torch.log(absdet)
-        #mean = torch.mean(-log_absdet - log_y)
-        #var = torch.var(y * absdet)
-        mean = torch.mean(y/absdet)
-        var = torch.var(y/absdet)
-        y = (y/mean).detach()
+        log_y = torch.log(y)
+        log_absdet = torch.log(absdet)
+        mean = torch.mean(-log_absdet - log_y)
+        var = torch.var(y * absdet)
+        #mean = torch.mean(y/absdet)
+        #var = torch.var(y/absdet)
+        #y = (y/mean).detach()
 
         # Backprop #
-        loss = self.loss_func(y,absdet)
-        #loss = mean
+        #loss = self.loss_func(y,absdet)
+        loss = mean
         loss.backward()
         self.optimizer.step()
         if self.scheduler is not None:
@@ -251,7 +251,7 @@ class Integrator():
             #loss = self.loss_func(y, absdet)
             loss = mean
             loss.backward()
-            #print("\t" "Loss = %0.8f" % loss)
+            print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------
 
             if apply_optimizer:
@@ -274,7 +274,7 @@ class Integrator():
     def apply_optimizer(self):
         self.optimizer.step()
         self.optimizer.zero_grad()
-
+        self.z_mapper = {}
         if self.scheduler is not None:
             self.scheduler.step(self.scheduler_step)
             self.scheduler_step += 1

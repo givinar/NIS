@@ -171,7 +171,8 @@ class TrainServer:
             #[samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
             [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
-
+            #print("s1 max = " + str(torch.max(samples[:, 0]).item()) + "s1 min = " + str(torch.min(samples[:, 0]).item()) +
+            #      "s2 max = " + str(torch.max(samples[:, 1]).item()) + "s2 min = " + str(torch.min(samples[:, 1]).item()))
             samples[:, 0] = samples[:, 0] * 2 * np.pi
             samples[:, 1] = torch.acos(samples[:, 1])
             pdfs = (1 / (2 * np.pi)) / pdfs
@@ -321,7 +322,7 @@ class NeuralImportanceSampling:
                                                                         out_shape=[out_features],
                                                                         hidden_sizes=[hidden_dim] * n_hidden_layers,
                                                                         hidden_activation=nn.ReLU(),
-                                                                        output_activation=None)
+                                                                        output_activation=nn.Sigmoid())
         if coupling_name == 'additive':
             return AdditiveCouplingTransform(mask, transform_net_create_fn, blob,
                                              num_context_features=num_context_features)
@@ -520,9 +521,9 @@ if __name__ == '__main__':
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
 
     logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
-    #server_processing(experiment_config)
+    server_processing(experiment_config)
 
-    experiment_config.num_context_features = 0
-    nis = NeuralImportanceSampling(experiment_config)
-    nis.initialize()
-    nis.run_experiment()
+    #experiment_config.num_context_features = 0
+    #nis = NeuralImportanceSampling(experiment_config)
+    #nis.initialize()
+    #nis.run_experiment()
