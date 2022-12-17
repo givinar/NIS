@@ -322,7 +322,7 @@ class NeuralImportanceSampling:
                                                                         out_shape=[out_features],
                                                                         hidden_sizes=[hidden_dim] * n_hidden_layers,
                                                                         hidden_activation=nn.ReLU(),
-                                                                        output_activation=nn.Sigmoid())
+                                                                        output_activation=nn.Softmax())
         if coupling_name == 'additive':
             return AdditiveCouplingTransform(mask, transform_net_create_fn, blob,
                                              num_context_features=num_context_features)
