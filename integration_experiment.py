@@ -15,7 +15,7 @@ from couplings import PiecewiseLinearCouplingTransform, PiecewiseQuadraticCoupli
     PiecewiseCubicCouplingTransform, AdditiveCouplingTransform, AffineCouplingTransform
 from integrator import Integrator
 import functions
-from network import MLP
+from network import MLP, UNet
 from transform import CompositeTransform
 from utils import pyhocon_wrapper, utils
 from visualize import visualize, FunctionVisualizer
@@ -64,6 +64,7 @@ class ExperimentConfig:
     num_context_features: int = 0
     hidden_dim: int = 10
     n_hidden_layers: int = 3
+    network_type: str = "MLP"
     blob: Union[int, None] = None
     piecewise_bins: int = 10
     lr: float = 0.01
@@ -91,6 +92,7 @@ class ExperimentConfig:
                                 hidden_dim=pyhocon_config.get_int('train.num_hidden_dims'),
                                 ndims=pyhocon_config.get_int('train.num_coupling_layers'),
                                 n_hidden_layers=pyhocon_config.get_int('train.num_hidden_layers'),
+                                network_type=pyhocon_config.get_string('train.network_type', 'MLP'),
                                 blob=pyhocon_config.get_int('train.num_blob_bins', 0),
                                 piecewise_bins=pyhocon_config.get_int('train.num_piecewise_bins', 10),
                                 loss_func=pyhocon_config.get_string('train.loss', 'MSE'),
@@ -281,7 +283,8 @@ class NeuralImportanceSampling:
                                                               n_hidden_layers=self.config.n_hidden_layers,
                                                               blob=self.config.blob,
                                                               piecewise_bins=self.config.piecewise_bins,
-                                                              num_context_features=self.config.num_context_features)
+                                                              num_context_features=self.config.num_context_features,
+                                                              network_type=self.config.network_type)
                                    for mask in masks])
         dist = torch.distributions.uniform.Uniform(torch.tensor([0.0] * self.config.ndims),
                                                    torch.tensor([1.0] * self.config.ndims))
@@ -317,12 +320,23 @@ class NeuralImportanceSampling:
             self.tb_writer.add_text("Config", '\n'.join([f"{k.rjust(20, ' ')}: {v}" for k, v in asdict(self.config).items()]))
 
     def create_base_transform(self, mask, coupling_name, hidden_dim, n_hidden_layers, blob, piecewise_bins,
-                              num_context_features=0):
-        transform_net_create_fn = lambda in_features, out_features: MLP(in_shape=[in_features],
-                                                                        out_shape=[out_features],
-                                                                        hidden_sizes=[hidden_dim] * n_hidden_layers,
-                                                                        hidden_activation=nn.ReLU(),
-                                                                        output_activation=nn.Softmax())
+                              num_context_features=0, network_type='MLP'):
+        if network_type.lower() == "mlp":
+            transform_net_create_fn = lambda in_features, out_features: MLP(in_shape=[in_features],
+                                                                            out_shape=[out_features],
+                                                                            hidden_sizes=[hidden_dim] * n_hidden_layers,
+                                                                            hidden_activation=nn.ReLU(),
+                                                                            output_activation=None)
+        elif network_type.lower() == 'unet':
+            transform_net_create_fn = lambda in_features, out_features: UNet(in_features=in_features,
+                                                                             out_features=out_features,
+                                                                             max_hidden_features=256,
+                                                                             num_layers=n_hidden_layers,
+                                                                             nonlinearity=nn.ReLU(),
+                                                                             output_activation=nn.Softmax())
+        else:
+            raise ValueError(f"network_type argument should be in [mlp, unet], but given {network_type}")
+
         if coupling_name == 'additive':
             return AdditiveCouplingTransform(mask, transform_net_create_fn, blob,
                                              num_context_features=num_context_features)

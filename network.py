@@ -5,6 +5,7 @@ import numpy as np
 
 from torch.nn import functional as F
 from torch import nn
+from utils import utils
 
 class MLP(nn.Module):
     """A standard multi-layer perceptron."""
@@ -28,7 +29,7 @@ class MLP(nn.Module):
         self._out_shape = torch.Size(out_shape)
         self._hidden_sizes = hidden_sizes
         self._hidden_activation = hidden_activation
-        self._output_activation = output_activation 
+        self._output_activation = output_activation
 
         if len(hidden_sizes) == 0:
             raise ValueError('List of hidden sizes can\'t be empty.')
@@ -51,6 +52,10 @@ class MLP(nn.Module):
         outputs = self._input_layer(inputs)
         outputs = self._hidden_activation(outputs)
 
+        if outputs.size(dim=0) > 1:
+            normalization = nn.BatchNorm1d(outputs.size(dim=1))
+            outputs = normalization(outputs)
+
         for hidden_layer in self._hidden_layers:
             outputs = hidden_layer(outputs)
             outputs = self._hidden_activation(outputs)
@@ -69,7 +74,8 @@ class UNet(nn.Module):
                  max_hidden_features,
                  num_layers,
                  out_features,
-                 nonlinearity=F.relu):
+                 nonlinearity=F.relu,
+                 output_activation=None):
         super().__init__()
 
         assert utils.is_power_of_two(max_hidden_features), \
@@ -103,8 +109,11 @@ class UNet(nn.Module):
         ])
 
         self.final_layer = nn.Linear(max_hidden_features, out_features)
+        self._output_activation = output_activation
 
-    def forward(self, inputs):
+    def forward(self, inputs, context):
+        if context is not None:
+            inputs = torch.cat((inputs, context), 1)
         temps = self.initial_layer(inputs)
         temps = self.nonlinearity(temps)
 
@@ -118,11 +127,13 @@ class UNet(nn.Module):
         temps = self.nonlinearity(temps)
 
         for i, layer in enumerate(self.up_layers):
-            temps += down_temps[self.num_layers - i - 1]
+            temps = temps + down_temps[self.num_layers - i - 1]
             temps = self.nonlinearity(temps)
             temps = layer(temps)
-
-        return self.final_layer(temps)
+        temps = self.final_layer(temps)
+        if self._output_activation:
+            temps = self._output_activation(temps)
+        return temps
 
 
 class ResidualBlock(nn.Module):
