@@ -193,11 +193,13 @@ class Integrator():
             return absdet.to('cpu')
         else:
             z = self.dist.sample((context.shape[0],)).to(self.device)
-            list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context[:, [0,1,2]])))
+            # list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context[:, [0,1,2]])))
             #np.savetxt("foo.csv", context, delimiter=" ")
-            with torch.no_grad():
-                x, absdet = self.flow(z, context=torch.tensor(context[:, :8]).to(self.device))
-            return (x.to('cpu'), absdet.to('cpu'))
+            x, absdet = self.flow(z, context=torch.tensor(context[:, :8]).to(self.device))
+            x, absdet = x.to('cpu'), absdet.to('cpu')
+            list(map(lambda item: self.z_mapper.update({item[1].tobytes(): item[0]}),
+                     zip(absdet, context[:, [0, 1, 2]])))
+            return (x, absdet)
 
     def train_with_context(self, context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
                            apply_optimizer=True) -> list:
@@ -217,8 +219,8 @@ class Integrator():
         #        print(row)
         #    counter += 1
         #    print(counter)
-        z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, [0,1,2]]])
-        #z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, :-1]])
+        # z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, [0,1,2]]])
+        # z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, :-1]])
         # log_prob = self.dist.log_prob(z)
         # In practice for uniform dist, log_prob = 0 and absdet is multiplied by 1
         # But in the future we might change sampling dist so good to have
@@ -227,12 +229,19 @@ class Integrator():
         context_x = context[:, :-1]
         context_y = context[:, -1]
         train_result = []
-        for batch_x, batch_y, batch_z in DataLoader(dataset=TensorDataset(torch.Tensor(context_x),
-                                                                          torch.Tensor(context_y),
-                                                                          z),
+        for batch_x, batch_y in DataLoader(dataset=TensorDataset(torch.Tensor(context_x),
+                                                                          torch.Tensor(context_y)),
                                            batch_size=batch_size):
 
-            x, absdet = self.flow(batch_z, batch_x.to(self.device))
+            # x, absdet = self.flow(batch_z, batch_x.to(self.device))
+
+
+            absdet = [self.z_mapper[row.tobytes()] for row in context[:, [0, 1, 2]]]
+
+            # x, absdet = torch.stack(x).to(self.device), torch.stack(absdet).to(self.device)
+
+            absdet = torch.stack(absdet).to(self.device)
+
             # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
 
             # --------------- START TODO compute loss ---------------
@@ -266,8 +275,9 @@ class Integrator():
                 return_dict['mean'] = mean.to('cpu').item()
                 return_dict['uncertainty'] = torch.sqrt(var / (context.shape[0] - 1.)).to('cpu').item()
             if points:
-                return_dict['z'] = batch_z.to('cpu')
-                return_dict['x'] = x.to('cpu')
+                pass
+                # return_dict['z'] = batch_z.to('cpu')
+                # return_dict['x'] = x.to('cpu')
             train_result.append(return_dict)
         return train_result
 

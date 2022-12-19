@@ -180,8 +180,8 @@ class TrainServer:
             pdfs = (1 / (2 * np.pi)) / pdfs
             pdf_light_samples = pdf_light_samples / (2 * np.pi)
 
-        logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
-        logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
+        logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].detach().numpy(), samples[1, :].detach().numpy(), samples[-1, :].detach().numpy())
+        logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].detach().numpy(), pdfs[1].detach().numpy(), pdfs[-1].detach().numpy())
 
         return [samples, pdf_light_samples, pdfs]  # lights, pdfs
 
