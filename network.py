@@ -52,10 +52,6 @@ class MLP(nn.Module):
         outputs = self._input_layer(inputs)
         outputs = self._hidden_activation(outputs)
 
-        if outputs.size(dim=0) > 1:
-            normalization = nn.BatchNorm1d(outputs.size(dim=1))
-            outputs = normalization(outputs)
-
         for hidden_layer in self._hidden_layers:
             outputs = hidden_layer(outputs)
             outputs = self._hidden_activation(outputs)
