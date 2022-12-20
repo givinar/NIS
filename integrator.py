@@ -196,10 +196,9 @@ class Integrator():
             # list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context[:, [0,1,2]])))
             #np.savetxt("foo.csv", context, delimiter=" ")
             x, absdet = self.flow(z, context=torch.tensor(context[:, :8]).to(self.device))
-            x, absdet = x.to('cpu'), absdet.to('cpu')
             list(map(lambda item: self.z_mapper.update({item[1].tobytes(): item[0]}),
                      zip(absdet, context[:, [0, 1, 2]])))
-            return (x, absdet)
+            return (x.to('cpu'), absdet.to('cpu'))
 
     def train_with_context(self, context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
                            apply_optimizer=True) -> list:
@@ -236,7 +235,7 @@ class Integrator():
             # x, absdet = self.flow(batch_z, batch_x.to(self.device))
 
 
-            absdet = [self.z_mapper[row.tobytes()] for row in context[:, [0, 1, 2]]]
+            absdet = [self.z_mapper[row.tobytes()] for row in batch_x[:, [0, 1, 2]].numpy()]
 
             # x, absdet = torch.stack(x).to(self.device), torch.stack(absdet).to(self.device)
 
