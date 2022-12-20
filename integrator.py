@@ -203,7 +203,7 @@ class Integrator():
         if inverse:
             z = torch.tensor(context[:, 8:]).to(self.device)
             z[:, 0] = z[:, 0] / (2 * np.pi) #phi
-            z[:, 1] = np.abs(np.cos(z[:, 1]))       #theta
+            z[:, 1] = np.abs(np.cos(z[:, 1].cpu()))       #theta
             with torch.no_grad():
                 x, absdet = self.flow.inverse(z, context=torch.tensor(context[:, :8]).to(self.device))
             return absdet.to('cpu')
@@ -215,7 +215,7 @@ class Integrator():
                 x, absdet = self.flow(z, context=torch.tensor(context[:, :8]).to(self.device))
             return (x.to('cpu'), absdet.to('cpu'))
 
-    def train_with_context(self, context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
+    def train_with_context(self, z_context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
                            apply_optimizer=True) -> list:
         # Initialize #
         self.flow.train()
@@ -233,7 +233,8 @@ class Integrator():
         #        print(row)
         #    counter += 1
         #    print(counter)
-        z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, [0,1,2]]])
+        z = z_context[0]
+        context = z_context[1]
         #z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, :-1]])
         # log_prob = self.dist.log_prob(z)
         # In practice for uniform dist, log_prob = 0 and absdet is multiplied by 1
@@ -294,3 +295,6 @@ class Integrator():
         if self.scheduler is not None:
             self.scheduler.step(self.scheduler_step)
             self.scheduler_step += 1
+
+    def generate_z_by_context(self, context):
+        return [self.z_mapper[row.tobytes()] for row in context[:, [0,1,2]]]

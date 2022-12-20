@@ -1,7 +1,9 @@
 import argparse
 import math
 import os
+import random
 import sys
+import time
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Union
@@ -25,6 +27,7 @@ import socket
 from enum import Enum
 from collections import namedtuple
 import logging
+from collections import OrderedDict
 
 Request = namedtuple('Request', 'name length')
 
@@ -73,6 +76,9 @@ class ExperimentConfig:
     batch_size: int = 2000
     gradient_accumulation: bool = True
     hybrid_sampling: bool = False
+    num_training_steps: int = 10
+    num_samples_per_training_step: int = 10_000
+    max_train_buffer_size: int = 2_000_000
 
     save_plots: blob = True
     plot_dimension: int = 2
@@ -81,7 +87,6 @@ class ExperimentConfig:
     use_tensorboard: bool = False
     host: str = '127.0.0.1'
     port: int = 65432
-    hybrid_sampling: bool = False
 
     @classmethod
     def init_from_pyhocon(cls, pyhocon_config: pyhocon_wrapper.ConfigTree):
@@ -100,6 +105,10 @@ class ExperimentConfig:
                                 experiment_dir_name=pyhocon_config.get_string('logging.plot_dir_name',
                                                                               cls.experiment_dir_name),
                                 hybrid_sampling=pyhocon_config.get_bool('train.hybrid_sampling', False),
+                                num_training_steps=pyhocon_config.get_int('train.num_training_steps', 10),
+                                num_samples_per_training_step=pyhocon_config.get_int('train.num_samples_per_training_step', 10_000),
+                                max_train_buffer_size=pyhocon_config.get_int('train.max_train_buffer_size', 2_000_000),
+
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
                                 num_context_features=pyhocon_config.get_int('train.num_context_features'),
@@ -267,9 +276,11 @@ class NeuralImportanceSampling:
         self.integrator = None
         self.visualize_object = None
         self.function_visualizer = None
+        self.time = time.time()
 
         # need for gradient accumulation: we apply optimizer.step() only once after the last training call
         self.train_sampling_call_difference = 0
+        self.train_buffer = OrderedDict()
 
     def initialize(self, mode='server'):
         """
@@ -384,17 +395,40 @@ class NeuralImportanceSampling:
 
     def train(self, context):
         self.train_sampling_call_difference -= 1
-        train_result = self.integrator.train_with_context(context=context, lr=False, integral=True, points=True,
-                                                          batch_size=self.config.batch_size,
-                                                          apply_optimizer=not self.config.gradient_accumulation)
-        for epoch_result in train_result:
-            if self.visualize_object:
-                self.visualize_train_step(epoch_result)
-            if self.config.use_tensorboard:
-                self.log_tensorboard_train_step(epoch_result)
-        if self.config.gradient_accumulation and self.train_sampling_call_difference == 0:
-            self.integrator.apply_optimizer()
-        return train_result
+        z = self.integrator.generate_z_by_context(context)
+        self.train_buffer.update({context_sample[[0,1,2]].tobytes(): (z_sample, context_sample)
+                                  for z_sample, context_sample in zip(z, context)})
+        if self.train_sampling_call_difference == 0:
+            if len(self.train_buffer) > self.config.max_train_buffer_size:
+                remove_list = list(self.train_buffer.keys())[0: len(self.train_buffer) - self.config.max_train_buffer_size]
+                [self.train_buffer.pop(key) for key in remove_list]
+            train_results = []
+            for epoch in range(self.config.num_training_steps):
+                if len(self.train_buffer) > self.config.max_train_buffer_size:
+                    epoch_z_context = random.choices(list(self.train_buffer.values()),
+                                                     k=self.config.num_samples_per_training_step)
+                else:
+                    epoch_z_context = list(self.train_buffer.values())
+                epoch_z_context = [torch.stack([z for z, _ in epoch_z_context]),
+                                   torch.tensor([context for _, context in epoch_z_context])]
+                train_result = self.integrator.train_with_context(z_context=epoch_z_context, lr=False, integral=True,
+                                                                  points=True,
+                                                                  batch_size=self.config.batch_size,
+                                                                  apply_optimizer=not self.config.gradient_accumulation)
+                train_results.extend(train_result)
+                for epoch_result in train_result:
+                    if self.visualize_object:
+                        self.visualize_train_step(epoch_result)
+                    if self.config.use_tensorboard:
+                        self.log_tensorboard_train_step(epoch_result)
+
+            if self.config.gradient_accumulation:
+                self.integrator.apply_optimizer()
+
+            self.integrator.z_mapper = {}
+            print("Frame computed: ", time.time() - self.time)
+            self.time = time.time()
+            return train_results
 
     def visualize_train_step(self, train_result):
 
