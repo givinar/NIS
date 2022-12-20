@@ -73,6 +73,7 @@ class ExperimentConfig:
     batch_size: int = 2000
     gradient_accumulation: bool = True
     hybrid_sampling: bool = False
+    max_training_samples: int = 10000
 
     save_plots: blob = True
     plot_dimension: int = 2
@@ -383,6 +384,8 @@ class NeuralImportanceSampling:
 
     def train(self, context):
         self.train_sampling_call_difference -= 1
+        if context.shape[0] > self.config.max_training_samples:
+            context = context[np.random.choice(context.shape[0], self.config.max_training_samples, replace=False)]
         train_result = self.integrator.train_with_context(context=context, lr=False, integral=True, points=True,
                                                           batch_size=self.config.batch_size,
                                                           apply_optimizer=not self.config.gradient_accumulation)
