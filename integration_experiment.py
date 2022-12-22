@@ -76,7 +76,7 @@ class ExperimentConfig:
     batch_size: int = 2000
     gradient_accumulation: bool = True
     hybrid_sampling: bool = False
-    num_training_steps: int = 10
+    num_training_steps: int = 16
     num_samples_per_training_step: int = 10_000
     max_train_buffer_size: int = 2_000_000
 
@@ -105,7 +105,7 @@ class ExperimentConfig:
                                 experiment_dir_name=pyhocon_config.get_string('logging.plot_dir_name',
                                                                               cls.experiment_dir_name),
                                 hybrid_sampling=pyhocon_config.get_bool('train.hybrid_sampling', False),
-                                num_training_steps=pyhocon_config.get_int('train.num_training_steps', 10),
+                                num_training_steps=pyhocon_config.get_int('train.num_training_steps', 16),
                                 num_samples_per_training_step=pyhocon_config.get_int('train.num_samples_per_training_step', 10_000),
                                 max_train_buffer_size=pyhocon_config.get_int('train.max_train_buffer_size', 2_000_000),
 
@@ -404,17 +404,22 @@ class NeuralImportanceSampling:
                 [self.train_buffer.pop(key) for key in remove_list]
             train_results = []
             for epoch in range(self.config.num_training_steps):
-                if len(self.train_buffer) > self.config.max_train_buffer_size:
+                start = time.time()
+
+                if len(self.train_buffer) > self.config.num_samples_per_training_step:
                     epoch_z_context = random.choices(list(self.train_buffer.values()),
                                                      k=self.config.num_samples_per_training_step)
                 else:
                     epoch_z_context = list(self.train_buffer.values())
                 epoch_z_context = [torch.stack([z for z, _ in epoch_z_context]),
                                    torch.tensor([context for _, context in epoch_z_context])]
+                print(f"epoch_z_context time: {time.time() - start}")
+                start = time.time()
                 train_result = self.integrator.train_with_context(z_context=epoch_z_context, lr=False, integral=True,
                                                                   points=True,
                                                                   batch_size=self.config.batch_size,
                                                                   apply_optimizer=not self.config.gradient_accumulation)
+                print(f"Epoch time: {time.time() - start}")
                 train_results.extend(train_result)
                 for epoch_result in train_result:
                     if self.visualize_object:

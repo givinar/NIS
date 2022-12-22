@@ -1,4 +1,6 @@
 import sys
+import time
+
 import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader
@@ -244,15 +246,24 @@ class Integrator():
         context_x = context[:, :-1]
         context_y = context[:, -1]
         train_result = []
-        for batch_x, batch_y, batch_z in DataLoader(dataset=TensorDataset(torch.Tensor(context_x),
-                                                                          torch.Tensor(context_y),
-                                                                          z),
-                                           batch_size=batch_size):
+        start = time.time()
+        context_x = torch.Tensor(context_x)
+        print(f'context_x time: {time.time() - start}')
+        start = time.time()
 
+        context_y = torch.Tensor(context_y)
+        print(f'context_y time: {time.time() - start}')
+        start = time.time()
+        for batch_x, batch_y, batch_z in [(context_x, context_y, z)]:
+            print(f'batch time: {time.time() - start}')
+
+            start = time.time()
             x, absdet = self.flow(batch_z, batch_x.to(self.device))
+            print(f'flow time: {time.time() - start}')
             # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
 
             # --------------- START TODO compute loss ---------------
+            start = time.time()
             y = batch_y.to(self.device)
             y = y + np.finfo(np.float32).eps
 
@@ -266,13 +277,20 @@ class Integrator():
 
             # Backprop #
             #loss = self.loss_func(y, absdet)
+            print(f'loss time: {time.time() - start}')
+
             loss = mean
+            start = time.time()
             loss.backward()
+            print(f'backward time: {time.time() - start}')
             print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------
 
             if apply_optimizer:
+                start = time.time()
+
                 self.apply_optimizer()
+                print(f'optimizer time: {time.time() - start}')
 
             # Integral #
             return_dict = {'loss': loss.to('cpu').item(), 'epoch': self.global_step}
