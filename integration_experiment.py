@@ -276,7 +276,8 @@ class NeuralImportanceSampling:
         mode: ['server', 'experiment'] - if mode==server, don't use dimension reduction and function in visualization
         """
         self.function: functions.Function = getattr(functions, self.config.funcname)(n=self.config.ndims)
-        masks = self.create_binary_mask(self.config.ndims)
+        #masks = self.create_binary_mask(self.config.ndims)
+        masks = [[1., 0.], [0., 1.], [1., 0.], [0., 1]]
         flow = CompositeTransform([self.create_base_transform(mask=mask,
                                                               coupling_name=self.config.coupling_name,
                                                               hidden_dim=self.config.hidden_dim,

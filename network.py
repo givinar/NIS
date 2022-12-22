@@ -35,10 +35,15 @@ class MLP(nn.Module):
             raise ValueError('List of hidden sizes can\'t be empty.')
 
         self._input_layer = nn.Linear(np.prod(in_shape), hidden_sizes[0])
+        torch.nn.init.kaiming_uniform(self._input_layer.weight, nonlinearity='relu')
         self._hidden_layers = nn.ModuleList([
             nn.Linear(in_size, out_size)
             for in_size, out_size in zip(hidden_sizes[:-1], hidden_sizes[1:])
         ])
+
+        for l in self._hidden_layers:
+            torch.nn.init.kaiming_uniform(l.weight, nonlinearity='relu')
+
         self._output_layer = nn.Linear(hidden_sizes[-1], np.prod(out_shape))
 
     def forward(self, inputs, context=None):
