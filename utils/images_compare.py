@@ -30,6 +30,7 @@ class Metrics:
 
     def __post_init__(self):
         self.gt_tsr = self.load_exr(self.gt_image)
+        self.normalization_max = self.gt_tsr.max()
         self.gt_img = Image.fromarray(np.uint8(self.gt_tsr * 255.))
 
     def ssim(self, preds: np.ndarray) -> float:
@@ -41,7 +42,7 @@ class Metrics:
                                              torch.from_numpy(self.gt_tsr).to(torch.float))
 
     @staticmethod
-    def load_exr(path, max_channels=3):
+    def load_exr(path, max_channels=3, normalize_max=None):
         path = str(path)
         if not OpenEXR.isOpenExrFile(path):
             raise ValueError(f'Image {path} is not a valid OpenEXR file')
@@ -68,6 +69,8 @@ class Metrics:
             np_data[c] = np.frombuffer(buffer, dtype=np_dtype)
 
         tensor = np_data.reshape((-1, size[1], size[0]))
+        if normalize_max:
+            tensor = tensor / normalize_max
         return tensor.transpose(1, 2, 0)
 
 
@@ -77,9 +80,12 @@ class ImageCompare:
     gt_image: str
     metric_name: str
     step: int
+    normalization: bool
 
     def __post_init__(self):
         self.metrics = Metrics(self.gt_image)
+        if self.normalization:
+            self.normalization = self.metrics.normalization_max
         self.set_metric(self.metric_name)
 
     @staticmethod
@@ -91,23 +97,18 @@ class ImageCompare:
         arg_parser.add_argument('-gt', '--image_gt', type=str, required=True, help='Ground truth image path')
         arg_parser.add_argument('-m', '--metric', type=str, required=True, help='Metric')
         arg_parser.add_argument('-s', '--step', type=int, required=True, help='Iteration step')
+        arg_parser.add_argument('-n', '--normalization', type=bool, default=False, help='Normalize relative to the gt')
 
         return arg_parser.parse_args(arg)
-
-    @staticmethod
-    def list_files(path, valid_exts='exr'):
-        for (rootDir, dirNames, filenames) in os.walk(path):
-            for filename in filenames:
-                ext = filename[filename.rfind("."):].lower()
-                if ext.endswith(valid_exts):
-                    image_path = os.path.join(rootDir, filename).replace(" ", "\\ ")
-                    yield image_path
 
     def calc_metric(self, path: str, length: int, method: Callable) -> Tuple[np.ndarray, np.ndarray]:
         metric = np.zeros(length, float)
         indices = np.zeros(length, int)
-        for i, name in enumerate(self.list_files(path)):
-            metric[i] = method(self.metrics.load_exr(name))
+        files = os.listdir(path)
+        files.sort(key=lambda x: os.path.getmtime(os.path.join(path, x)))
+        for i, file_path in enumerate(files):
+            file_path = os.path.join(path, file_path)
+            metric[i] = method(self.metrics.load_exr(file_path, normalize_max=self.normalization))
             indices[i] = i * self.step
 
         return indices, metric
@@ -148,6 +149,7 @@ if __name__ == '__main__':
     ic = ImageCompare(options.image_folder,
                       options.image_gt,
                       options.metric,
-                      options.step)
+                      options.step,
+                      options.normalization)
 
     ic.show_plot()
