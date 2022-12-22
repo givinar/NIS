@@ -1,3 +1,4 @@
+import logging
 import sys
 import time
 
@@ -248,18 +249,18 @@ class Integrator():
         train_result = []
         start = time.time()
         context_x = torch.Tensor(context_x)
-        print(f'context_x time: {time.time() - start}')
+        logging.info(f'context_x time: {time.time() - start}')
         start = time.time()
 
         context_y = torch.Tensor(context_y)
-        print(f'context_y time: {time.time() - start}')
+        logging.info(f'context_y time: {time.time() - start}')
         start = time.time()
         for batch_x, batch_y, batch_z in [(context_x, context_y, z)]:
-            print(f'batch time: {time.time() - start}')
+            logging.info(f'batch time: {time.time() - start}')
 
             start = time.time()
             x, absdet = self.flow(batch_z, batch_x.to(self.device))
-            print(f'flow time: {time.time() - start}')
+            logging.info(f'flow time: {time.time() - start}')
             # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
 
             # --------------- START TODO compute loss ---------------
@@ -277,12 +278,12 @@ class Integrator():
 
             # Backprop #
             #loss = self.loss_func(y, absdet)
-            print(f'loss time: {time.time() - start}')
+            logging.info(f'loss time: {time.time() - start}')
 
             loss = mean
             start = time.time()
             loss.backward()
-            print(f'backward time: {time.time() - start}')
+            logging.info(f'backward time: {time.time() - start}')
             print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------
 
@@ -290,7 +291,7 @@ class Integrator():
                 start = time.time()
 
                 self.apply_optimizer()
-                print(f'optimizer time: {time.time() - start}')
+                logging.info(f'optimizer time: {time.time() - start}')
 
             # Integral #
             return_dict = {'loss': loss.to('cpu').item(), 'epoch': self.global_step}

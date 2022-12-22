@@ -280,7 +280,8 @@ class NeuralImportanceSampling:
 
         # need for gradient accumulation: we apply optimizer.step() only once after the last training call
         self.train_sampling_call_difference = 0
-        self.train_buffer = OrderedDict()
+        self.z_buffer = None
+        self.context_buffer = None
 
     def initialize(self, mode='server'):
         """
@@ -395,31 +396,33 @@ class NeuralImportanceSampling:
 
     def train(self, context):
         self.train_sampling_call_difference -= 1
-        z = self.integrator.generate_z_by_context(context)
-        self.train_buffer.update({context_sample[[0,1,2]].tobytes(): (z_sample, context_sample)
-                                  for z_sample, context_sample in zip(z, context)})
+        z = torch.stack(self.integrator.generate_z_by_context(context))
+        context = torch.tensor(context)
+        if self.z_buffer is None:
+            self.z_buffer = z
+        else:
+            self.z_buffer = torch.cat((self.z_buffer, z), 0)
+        if self.context_buffer is None:
+            self.context_buffer = context
+        else:
+            self.context_buffer = torch.cat((self.context_buffer, context), 0)
+
         if self.train_sampling_call_difference == 0:
-            if len(self.train_buffer) > self.config.max_train_buffer_size:
-                remove_list = list(self.train_buffer.keys())[0: len(self.train_buffer) - self.config.max_train_buffer_size]
-                [self.train_buffer.pop(key) for key in remove_list]
+            if self.context_buffer.size()[0] > self.config.max_train_buffer_size:
+                self.context_buffer = self.context_buffer[-self.config.max_train_buffer_size:]
+                self.z_buffer = self.z_buffer[-self.config.max_train_buffer_size:]
             train_results = []
             for epoch in range(self.config.num_training_steps):
                 start = time.time()
-
-                if len(self.train_buffer) > self.config.num_samples_per_training_step:
-                    epoch_z_context = random.choices(list(self.train_buffer.values()),
-                                                     k=self.config.num_samples_per_training_step)
-                else:
-                    epoch_z_context = list(self.train_buffer.values())
-                epoch_z_context = [torch.stack([z for z, _ in epoch_z_context]),
-                                   torch.tensor([context for _, context in epoch_z_context])]
-                print(f"epoch_z_context time: {time.time() - start}")
+                indices = torch.randperm(len(self.context_buffer))[:self.config.num_samples_per_training_step]
+                epoch_z_context = (self.z_buffer[indices], self.context_buffer[indices])
+                logging.info(f"epoch_z_context time: {time.time() - start}")
                 start = time.time()
                 train_result = self.integrator.train_with_context(z_context=epoch_z_context, lr=False, integral=True,
                                                                   points=True,
                                                                   batch_size=self.config.batch_size,
                                                                   apply_optimizer=not self.config.gradient_accumulation)
-                print(f"Epoch time: {time.time() - start}")
+                logging.info(f"Epoch time: {time.time() - start}")
                 train_results.extend(train_result)
                 for epoch_result in train_result:
                     if self.visualize_object:
@@ -431,7 +434,7 @@ class NeuralImportanceSampling:
                 self.integrator.apply_optimizer()
 
             self.integrator.z_mapper = {}
-            print("Frame computed: ", time.time() - self.time)
+            logging.info("Frame computed: ", time.time() - self.time)
             self.time = time.time()
             return train_results
 
