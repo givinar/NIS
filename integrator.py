@@ -1,4 +1,7 @@
+import logging
 import sys
+import time
+
 import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader
@@ -203,7 +206,7 @@ class Integrator():
         if inverse:
             z = torch.tensor(context[:, 8:]).to(self.device)
             z[:, 0] = z[:, 0] / (2 * np.pi) #phi
-            z[:, 1] = np.abs(np.cos(z[:, 1]))       #theta
+            z[:, 1] = np.abs(np.cos(z[:, 1].cpu()))       #theta
             with torch.no_grad():
                 x, absdet = self.flow.inverse(z, context=torch.tensor(context[:, :8]).to(self.device))
             return absdet.to('cpu')
@@ -215,7 +218,7 @@ class Integrator():
                 x, absdet = self.flow(z, context=torch.tensor(context[:, :8]).to(self.device))
             return (x.to('cpu'), absdet.to('cpu'))
 
-    def train_with_context(self, context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
+    def train_with_context(self, z_context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
                            apply_optimizer=True) -> list:
         # Initialize #
         self.flow.train()
@@ -233,7 +236,8 @@ class Integrator():
         #        print(row)
         #    counter += 1
         #    print(counter)
-        z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, [0,1,2]]])
+        z = z_context[0]
+        context = z_context[1]
         #z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, :-1]])
         # log_prob = self.dist.log_prob(z)
         # In practice for uniform dist, log_prob = 0 and absdet is multiplied by 1
@@ -243,15 +247,24 @@ class Integrator():
         context_x = context[:, :-1]
         context_y = context[:, -1]
         train_result = []
-        for batch_x, batch_y, batch_z in DataLoader(dataset=TensorDataset(torch.Tensor(context_x),
-                                                                          torch.Tensor(context_y),
-                                                                          z),
-                                           batch_size=batch_size):
+        start = time.time()
+        context_x = torch.Tensor(context_x)
+        logging.info(f'context_x time: {time.time() - start}')
+        start = time.time()
 
+        context_y = torch.Tensor(context_y)
+        logging.info(f'context_y time: {time.time() - start}')
+        start = time.time()
+        for batch_x, batch_y, batch_z in [(context_x, context_y, z)]:
+            logging.info(f'batch time: {time.time() - start}')
+
+            start = time.time()
             x, absdet = self.flow(batch_z, batch_x.to(self.device))
+            logging.info(f'flow time: {time.time() - start}')
             # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
 
             # --------------- START TODO compute loss ---------------
+            start = time.time()
             y = batch_y.to(self.device)
             y = y + np.finfo(np.float32).eps
 
@@ -265,13 +278,20 @@ class Integrator():
 
             # Backprop #
             #loss = self.loss_func(y, absdet)
+            logging.info(f'loss time: {time.time() - start}')
+
             loss = mean
+            start = time.time()
             loss.backward()
+            logging.info(f'backward time: {time.time() - start}')
             print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------
 
             if apply_optimizer:
+                start = time.time()
+
                 self.apply_optimizer()
+                logging.info(f'optimizer time: {time.time() - start}')
 
             # Integral #
             return_dict = {'loss': loss.to('cpu').item(), 'epoch': self.global_step}
@@ -294,3 +314,6 @@ class Integrator():
         if self.scheduler is not None:
             self.scheduler.step(self.scheduler_step)
             self.scheduler_step += 1
+
+    def generate_z_by_context(self, context):
+        return [self.z_mapper[row.tobytes()] for row in context[:, [0,1,2]]]
