@@ -435,7 +435,7 @@ class NeuralImportanceSampling:
                 self.integrator.apply_optimizer()
 
             self.integrator.z_mapper = {}
-            logging.info("Frame computed: ", time.time() - self.time)
+            print("Frame computed: ", time.time() - self.time)
             self.time = time.time()
             return train_results
 
