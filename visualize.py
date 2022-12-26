@@ -265,3 +265,36 @@ class FunctionVisualizer:
             self.vis_object.Add3dPlot(x_centers, y_centers, z_centers, bins, plot_name)
             return visualize_x
 
+
+class VisualizePoint():
+
+    def __init__(self, index, plot_step=10, path=os.path.join('logs', 'point_plot')):
+        self.path = path
+        os.makedirs(path, exist_ok=True)
+        self.bins = None
+        self.index = index
+        self.plot_step = plot_step
+        self.points = []
+        self.iteration = 0
+
+    def add_point(self, points: np.ndarray):
+        self.points.append(points[int(points.shape[0]*self.index)])
+        self.iteration += 1
+        if self.iteration % self.plot_step == 0:
+            self.plot_points()
+
+    def plot_points(self):
+        visualize_x = np.array(self.points)
+        bins, x_edges, y_edges = np.histogram2d(visualize_x[:, 0], visualize_x[:, 1], bins=20,
+                                                range=[[0, 2 * np.pi], [0, np.pi / 2]])
+        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+        x_centers, y_centers = np.meshgrid(x_centers, y_centers)
+
+        fig, ax = plt.subplots()
+        ax.set_title("Point distribution", fontsize=20)
+        ax.contourf(x_centers, y_centers, bins, 20)
+
+        path_fig = os.path.join(self.path,"frame_%04d.png"%self.iteration)
+        fig.savefig(path_fig)
+        plt.close(fig)

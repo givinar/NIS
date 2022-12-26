@@ -20,7 +20,7 @@ import functions
 from network import MLP, UNet
 from transform import CompositeTransform
 from utils import pyhocon_wrapper, utils
-from visualize import visualize, FunctionVisualizer
+from visualize import visualize, FunctionVisualizer, VisualizePoint
 
 # Using by server
 import socket
@@ -135,6 +135,7 @@ class TrainServer:
         self.put_infer_ok = Request(b'PUT INFER OK', 12)
         self.put_train_ok = Request(b'PUT TRAIN OK', 12)
         self.data_ok = Request(b'DATA OK', 7)
+        self.visualize_point = VisualizePoint(index=0.5, plot_step=10)
 
         self.length = 0
         self.raw_data = bytearray()
@@ -188,7 +189,8 @@ class TrainServer:
             samples[:, 1] = torch.acos(samples[:, 1])
             pdfs = (1 / (2 * np.pi)) / pdfs
             pdf_light_samples = pdf_light_samples / (2 * np.pi)
-
+        if self.nis.train_sampling_call_difference == 1:
+            self.visualize_point.add_point(samples.numpy())
         logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
         logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
 
