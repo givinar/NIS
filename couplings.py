@@ -115,7 +115,11 @@ class CouplingTransform(transform.Transform):
         identity_split = inputs[:, self.identity_features, ...]
         transform_split = inputs[:, self.transform_features, ...]
 
-        transform_params = self.transform_net(identity_split, context)
+        if self.blob:
+            identity_split_blob = self.one_blob(identity_split)
+            transform_params = self.transform_net(identity_split_blob, context)
+        else:
+            transform_params = self.transform_net(identity_split, context)
         transform_split, absdet = self._coupling_transform_inverse(
             inputs=transform_split,
             transform_params=transform_params
