@@ -268,7 +268,8 @@ class FunctionVisualizer:
 
 class VisualizePoint():
 
-    def __init__(self, index, plot_step=10, path=os.path.join('logs', 'point_plot')):
+    def __init__(self, index, nis, plot_step=10, path=os.path.join('logs', 'point_plot')):
+        self.context = None
         self.path = path
         os.makedirs(path, exist_ok=True)
         self.bins = None
@@ -276,6 +277,7 @@ class VisualizePoint():
         self.plot_step = plot_step
         self.points = []
         self.iteration = 0
+        self.nis = nis
 
     def add_point(self, points: np.ndarray):
         self.points.append(points[int(points.shape[0]*self.index)])
@@ -294,6 +296,28 @@ class VisualizePoint():
         fig, ax = plt.subplots()
         ax.set_title("Point distribution", fontsize=20)
         ax.contourf(x_centers, y_centers, bins, 20)
+
+        path_fig = os.path.join(self.path,"frame_%04d.png"%self.iteration)
+        fig.savefig(path_fig)
+        plt.close(fig)
+
+    def plot_pdf(self, samples):
+        plot_array = np.zeros((50, 50))
+        if self.context is None:
+            self.context = samples[int(samples.shape[0]*self.index)]
+        self.iteration += 1
+        if self.iteration % self.plot_step != 0:
+            return
+        for xi, x in enumerate(np.linspace(0, 2 * np.pi, plot_array.shape[0])):
+            for yi, y in enumerate(np.linspace(0, np.pi / 2, plot_array.shape[1])):
+                self.context[8] = x
+                self.context[9] = y
+                plot_array[xi, yi] = self.nis.integrator.sample_with_context(np.expand_dims(self.context, 0),
+                                                                             inverse=True)
+        plot_array = plot_array / plot_array.max()
+        fig, ax = plt.subplots()
+        ax.set_title("Point distribution", fontsize=20)
+        ax.imshow(plot_array)
 
         path_fig = os.path.join(self.path,"frame_%04d.png"%self.iteration)
         fig.savefig(path_fig)

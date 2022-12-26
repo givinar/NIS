@@ -135,7 +135,6 @@ class TrainServer:
         self.put_infer_ok = Request(b'PUT INFER OK', 12)
         self.put_train_ok = Request(b'PUT TRAIN OK', 12)
         self.data_ok = Request(b'DATA OK', 7)
-        self.visualize_point = VisualizePoint(index=0.5, plot_step=10)
 
         self.length = 0
         self.raw_data = bytearray()
@@ -146,6 +145,8 @@ class TrainServer:
         self.sock.listen(self.NUM_CONNECTIONS)
         self.nis = NeuralImportanceSampling(_config)
         self.hybrid_sampling = self.config.hybrid_sampling
+
+        self.visualize_point = VisualizePoint(index=0.5, plot_step=10, nis=self.nis)
 
     def connect(self):
         print(f"Waiting for connection by {self.host}")
@@ -190,7 +191,7 @@ class TrainServer:
             pdfs = (1 / (2 * np.pi)) / pdfs
             pdf_light_samples = pdf_light_samples / (2 * np.pi)
         if self.nis.train_sampling_call_difference == 1:
-            self.visualize_point.add_point(samples.numpy())
+            self.visualize_point.plot_pdf(points)
         logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
         logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
 
