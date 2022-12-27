@@ -178,10 +178,10 @@ class TrainServer:
     def make_infer(self):
         points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
         if self.hybrid_sampling:
-            pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
-            [samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
-            #pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
-            #[samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
+            #pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
+            #[samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
+            pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
+            [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
             [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
             #print("s1 max = " + str(torch.max(samples[:, 0]).item()) + "s1 min = " + str(torch.min(samples[:, 0]).item()) +
@@ -394,8 +394,9 @@ class NeuralImportanceSampling:
 
     def get_samples(self, context):
         self.train_sampling_call_difference += 1
-        pdf_light_sample = self.integrator.sample_with_context(context, inverse=True)
+        #pdf_light_sample = self.integrator.sample_with_context(context, inverse=True)
         [samples, pdf] = self.integrator.sample_with_context(context, inverse=False)
+        pdf_light_sample = torch.zeros(pdf.size())
         return [samples, pdf_light_sample, pdf]
 
     def train(self, context):

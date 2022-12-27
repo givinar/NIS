@@ -274,7 +274,8 @@ class VisualizePoint():
         os.makedirs(path, exist_ok=True)
         self.bins = None
         self.index = index
-        self.plot_step = plot_step
+        #self.plot_step = plot_step
+        self.plot_step = 1
         self.points = []
         self.iteration = 0
         self.nis = nis
@@ -302,7 +303,7 @@ class VisualizePoint():
         plt.close(fig)
 
     def plot_pdf(self, samples):
-        plot_array = np.zeros((50, 50))
+        plot_array = np.zeros((100, 100))
         if self.context is None:
             self.context = samples[int(samples.shape[0]*self.index)]
         self.iteration += 1
@@ -312,12 +313,19 @@ class VisualizePoint():
             for yi, y in enumerate(np.linspace(0, np.pi / 2, plot_array.shape[1])):
                 self.context[8] = x
                 self.context[9] = y
+                samples, pdf = self.nis.integrator.sample_with_context(np.expand_dims(self.context, 0),
+                                                                             inverse=False)
+                samples[:, 0] = samples[:, 0] * 2 * np.pi
+                samples[:, 1] = torch.acos(samples[:, 1])
+                self.context[8] = samples[:, 0]
+                self.context[9] = samples[:, 1]
                 plot_array[xi, yi] = self.nis.integrator.sample_with_context(np.expand_dims(self.context, 0),
                                                                              inverse=True)
+                plot_array[xi, yi] /= (2 * np.pi)
         plot_array = plot_array / plot_array.max()
         fig, ax = plt.subplots()
         ax.set_title("Point distribution", fontsize=20)
-        ax.imshow(plot_array)
+        ax.imshow(plot_array, interpolation='bilinear')
 
         path_fig = os.path.join(self.path,"frame_%04d.png"%self.iteration)
         fig.savefig(path_fig)
