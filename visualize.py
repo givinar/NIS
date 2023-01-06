@@ -239,7 +239,7 @@ class FunctionVisualizer:
 
         if self.n_components == 2:
             if self.bins is None:
-                bins, x_edges, y_edges = np.histogram2d(visualize_x[:, 0], visualize_x[:, 1], bins=20,
+                self.bins, x_edges, y_edges = np.histogram2d(visualize_x[:, 0], visualize_x[:, 1], bins=20,
                                                         range=[[0, 1], [0, 1]])
             else:
                 newbins, x_edges, y_edges = np.histogram2d(visualize_x[:, 0], visualize_x[:, 1], bins=20,
@@ -248,7 +248,7 @@ class FunctionVisualizer:
             x_centers = (x_edges[:-1] + x_edges[1:]) / 2
             y_centers = (y_edges[:-1] + y_edges[1:]) / 2
             x_centers, y_centers = np.meshgrid(x_centers, y_centers)
-            self.vis_object.AddContour(x_centers, y_centers, bins, plot_name)
+            self.vis_object.AddContour(x_centers, y_centers, self.bins, plot_name)
             return visualize_x
         elif self.n_components == 3:
             if self.bins is None:
