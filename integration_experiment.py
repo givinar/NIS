@@ -196,30 +196,24 @@ class TrainServer:
         else:
         #if self.nis.train_sampling_call_difference == 1:
             #self.middle_point = points[[int(points.shape[0] * 0.5)-1, int(points.shape[0] * 0.5), int(points.shape[0] * 0.5)+1]]
-                #print("Size of image: " + str(points.shape[0]) +" X: " + str(self.middle_point[:, 0]) + " Y: " + str(self.middle_point[:, 1])
-                #      + " Z: " + str(self.middle_point[:, 2]))
-                #[samples_n, pdf_light_samples_n, pdfs_n] = self.nis.get_samples(middle_point)
+            #[samples_n, pdf_light_samples_n, pdfs_n] = self.nis.get_samples(middle_point)
             [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
             self.samples_tensor = samples.clone().numpy()
             samples[:, 0] = samples[:, 0] * 2 * np.pi
             samples[:, 1] = torch.acos(samples[:, 1])
-                #print("s1 max = " + str(torch.max(samples[:, 0]).item()) + "s1 min = " + str(torch.min(samples[:, 0]).item()) +
-                #      "s2 max = " + str(torch.max(samples[:, 1]).item()) + "s2 min = " + str(torch.min(samples[:, 1]).item()))
             pdfs = (1 / (2 * np.pi)) / pdfs
             #pdf_light_samples = pdf_light_samples / (2 * np.pi)
-                #samples[[int(samples.shape[0] * 0.5)-1, int(samples.shape[0] * 0.5), int(samples.shape[0] * 0.5)+1]] = samples_n
-                #pdfs[[int(pdfs.shape[0] * 0.5)-1, int(pdfs.shape[0] * 0.5), int(pdfs.shape[0] * 0.5)+1]] = pdfs_n
-                #pdf_light_samples[[int(pdf_light_samples.shape[0] * 0.5)-1, int(pdf_light_samples.shape[0] * 0.5), int(pdf_light_samples.shape[0] * 0.5)+1]] = pdf_light_samples_n
+            #samples[[int(samples.shape[0] * 0.5)-1, int(samples.shape[0] * 0.5), int(samples.shape[0] * 0.5)+1]] = samples_n
+            #pdfs[[int(pdfs.shape[0] * 0.5)-1, int(pdfs.shape[0] * 0.5), int(pdfs.shape[0] * 0.5)+1]] = pdfs_n
+            #pdf_light_samples[[int(pdf_light_samples.shape[0] * 0.5)-1, int(pdf_light_samples.shape[0] * 0.5), int(pdf_light_samples.shape[0] * 0.5)+1]] = pdf_light_samples_n
             #if self.nis.train_sampling_call_difference == 1:
             #[self.s1, self.s2] = samples[int(samples.shape[0] * 0.5)].numpy()
-                #pdf = pdfs[int(pdfs.shape[0] * 0.5)]
+            #pdf = pdfs[int(pdfs.shape[0] * 0.5)]
             #self.pdf = pdfs[int(pdfs.shape[0] * 0.5)].numpy()
-                #self.visualize_point.add_sample_with_pdf_infer([self.s1, self.s2], 1, "infer")
+            #self.visualize_point.add_sample_with_pdf_infer([self.s1, self.s2], 1, "infer")
             #self.visualize_point.add_sample_with_pdf_infer([self.s1 / (2 * np.pi), np.cos(self.s2)], 1, "infer")
             #self.visualize_point.plot_pdf(self.middle_point)
             #self.visualize_point.add_point(self.samples_tensor)
-            #logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
-            #logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
 
         return [samples, pdf_light_samples, pdfs]  # lights, pdfs
 
@@ -227,35 +221,14 @@ class TrainServer:
         #context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3))
         context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, 8 + 3))
         context = context[~np.isnan(context).any(axis=1), :]
-        #mask = (context[:, 0] + context[:, 1] + context[:, 2] > 0)
-        #mask_zero = (context[:, 0] + context[:, 1] + context[:, 2] == 0)
-        #non_zero_context = context[mask, :]
-        #zero_context = context[mask_zero, :]
-        #row_id = random.sample(range(0, zero_context.shape[0] - 1), non_zero_context.shape[0])
-        #context = np.concatenate((non_zero_context, zero_context[row_id, :]), axis=0)
-        #np.random.shuffle(context)
         if self.hybrid_sampling:
             pass
         else:
-        #if self.nis.train_sampling_call_difference == 1:
-            #idx_1 = np.where((context[:, 3] == self.middle_point[0, 0]) * (context[:, 4] == self.middle_point[0, 1]) *
-            #            (context[:, 5] == self.middle_point[0, 2]))
-            #idx_2 = np.where((context[:, 3] == self.middle_point[1, 0]) * (context[:, 4] == self.middle_point[1, 1]) *
-            #            (context[:, 5] == self.middle_point[1, 2]))
-            #idx_3 = np.where((context[:, 3] == self.middle_point[2, 0]) * (context[:, 4] == self.middle_point[2, 1]) *
-            #            (context[:, 5] == self.middle_point[2, 2]))
-
-            #if (not np.any(idx_1)) and (not np.any(idx_2)) and (not np.any(idx_3)):
-            #    return
-                #tmp = torch.tensor([[self.s1 / (2 * np.pi), np.cos(self.s2)]])
-                #y = self.nis.function(self.samples_tensor)
-
-            #context = np.concatenate((context[idx_1], context[idx_2], context[idx_3]), axis=0)
-                #lum = 0.2126 * context[:, 0] + 0.7152 * context[:, 1] + 0.0722 * context[:, 2]
+            #y = self.nis.function(self.samples_tensor)
+            # lum[0] = y[0].item()
+            # lum[1] = y[1].item()
+            # lum[2] = y[2].item()
             lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
-                #lum[0] = y[0].item()
-                #lum[1] = y[1].item()
-                #lum[2] = y[2].item()
             tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
             tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1, dtype=np.float32)
             train_result = self.nis.train(context=tdata)
@@ -263,12 +236,8 @@ class TrainServer:
             #self.visualize_point.add_sample_with_pdf_train([self.s1 / (2 * np.pi), np.cos(self.s2)], pdf, "train")
         self.num_frame +=1
         print("Frame num: " + str(self.num_frame))
-        #non_zero = np.count_nonzero(lum)
-        #zero = lum.shape[0] - non_zero
-        #p = zero * 100 / lum.shape[0]
-        #print("Frame: " + str(self.num_frame) + " Bounce: " + str(self.nis.train_sampling_call_difference) + " Non-zero: " + str(non_zero)
-        #      + " Zero: " + str(zero) + " (" + str(p) +"%)")
         self.nis.train_sampling_call_difference -= 1
+
     def process(self):
         try:
             logging.debug('Mode = %s', self.mode.name)
