@@ -85,7 +85,7 @@ def linear_spline(inputs, unnormalized_pdf,
         outputs = outputs * (top - bottom) + bottom
         logabsdet = logabsdet + math.log(top - bottom) - math.log(right - left)
     #absdet = torch.exp(-logabsdet)
-    absdet = torch.exp(logabsdet)
+    absdet = torch.exp(-logabsdet)
     return outputs, absdet
 
 def quadratic_spline(inputs,
@@ -185,7 +185,7 @@ def quadratic_spline(inputs,
         outputs = outputs * (top - bottom) + bottom
         logabsdet = logabsdet + math.log(top - bottom) - math.log(right - left)
 
-    absdet = torch.exp(logabsdet)
+    absdet = torch.exp(-logabsdet)
     return outputs, absdet
 
 def cubic_spline(inputs,

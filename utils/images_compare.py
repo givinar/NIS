@@ -35,7 +35,7 @@ class Metrics:
 
     def ssim(self, preds: np.ndarray) -> float:
         preds_img = Image.fromarray(np.uint8(preds * 255.))
-        return compare_ssim(preds_img, self.gt_img)
+        return compare_ssim(preds_img, self.gt_img, tile_size = 1)
 
     def mape(self, preds: np.ndarray) -> float:
         return MeanAbsolutePercentageError()(torch.from_numpy(preds).to(torch.float),
@@ -69,8 +69,9 @@ class Metrics:
             np_data[c] = np.frombuffer(buffer, dtype=np_dtype)
 
         tensor = np_data.reshape((-1, size[1], size[0]))
-        if normalize_max:
-            tensor = tensor / normalize_max
+        #if normalize_max:
+        #    tensor = tensor / normalize_max
+        tensor = tensor / tensor.max()
         return tensor.transpose(1, 2, 0)
 
 
