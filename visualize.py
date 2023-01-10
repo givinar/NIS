@@ -85,7 +85,7 @@ class visualize:
         Nv = int(N_data != 0) + int(N_cont != 0) + int(N_plot_3d != 0) + int(N_hist != 0) + int(N_curv != 0)
         fig, axs = plt.subplots(Nv,Nh,figsize=(Nh*6,Nv*6))
         plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.9, wspace=0.2, hspace=0.2)
-        fig.suptitle("Epoch %d"%epoch,fontsize=22)
+        fig.suptitle("Frame %d"%epoch,fontsize=22)
 
         if Nv == 1: # Turn the ax vector into array
             axs = axs.reshape(1,-1)

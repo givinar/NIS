@@ -152,7 +152,6 @@ class TrainServer:
         self.s2 = 0
         self.pdf = 0
         self.middle_point = None
-        self.num_frame = 0
         self.samples_tensor = None
 
     def connect(self):
@@ -185,23 +184,27 @@ class TrainServer:
 
     def make_infer(self):
         self.nis.train_sampling_call_difference += 1
-        #points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
-        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape(
-            (-1, 8 + 2))  # add vec2 light_sample_dir
+        if self.nis.train_sampling_call_difference == 1:
+            self.nis.num_frame += 1
+            print("Frame num: " + str(self.nis.num_frame))
+        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
+        #points = np.frombuffer(self.raw_data, dtype=np.float32).reshape(
+        #    (-1, 8 + 2))  # add vec2 light_sample_dir
         if self.hybrid_sampling:
             #pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
             #[samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
             pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
             [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
-        #if self.nis.train_sampling_call_difference == 1:
-            #self.middle_point = points[[int(points.shape[0] * 0.5)-1, int(points.shape[0] * 0.5), int(points.shape[0] * 0.5)+1]]
-            #[samples_n, pdf_light_samples_n, pdfs_n] = self.nis.get_samples(middle_point)
-            [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
-            self.samples_tensor = samples.clone().numpy()
-            samples[:, 0] = samples[:, 0] * 2 * np.pi
-            samples[:, 1] = torch.acos(samples[:, 1])
-            pdfs = (1 / (2 * np.pi)) / pdfs
+            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+                [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
+                self.samples_tensor = samples.clone().numpy()
+                samples[:, 0] = samples[:, 0] * 2 * np.pi
+                samples[:, 1] = torch.acos(samples[:, 1])
+                pdfs = (1 / (2 * np.pi)) / pdfs
+            else:
+                pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
+                [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
             #pdf_light_samples = pdf_light_samples / (2 * np.pi)
             #samples[[int(samples.shape[0] * 0.5)-1, int(samples.shape[0] * 0.5), int(samples.shape[0] * 0.5)+1]] = samples_n
             #pdfs[[int(pdfs.shape[0] * 0.5)-1, int(pdfs.shape[0] * 0.5), int(pdfs.shape[0] * 0.5)+1]] = pdfs_n
@@ -218,24 +221,20 @@ class TrainServer:
         return [samples, pdf_light_samples, pdfs]  # lights, pdfs
 
     def make_train(self):
-        #context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3))
-        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, 8 + 3))
+        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3))
+        #context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, 8 + 3))
         context = context[~np.isnan(context).any(axis=1), :]
         if self.hybrid_sampling:
             pass
         else:
-            #y = self.nis.function(self.samples_tensor)
-            # lum[0] = y[0].item()
-            # lum[1] = y[1].item()
-            # lum[2] = y[2].item()
-            lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
-            tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
-            tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1, dtype=np.float32)
-            train_result = self.nis.train(context=tdata)
-
+            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+                lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
+                tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
+                tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1, dtype=np.float32)
+                train_result = self.nis.train(context=tdata)
+            else:
+                pass
             #self.visualize_point.add_sample_with_pdf_train([self.s1 / (2 * np.pi), np.cos(self.s2)], pdf, "train")
-        self.num_frame +=1
-        print("Frame num: " + str(self.num_frame))
         self.nis.train_sampling_call_difference -= 1
 
     def process(self):
@@ -310,6 +309,7 @@ class NeuralImportanceSampling:
         self.visualize_object = None
         self.function_visualizer = None
         self.time = time.time()
+        self.num_frame = 0
 
         # need for gradient accumulation: we apply optimizer.step() only once after the last training call
         self.train_sampling_call_difference = 0
@@ -500,11 +500,11 @@ class NeuralImportanceSampling:
             self.visualize_object.AddPointSet(visualize_x, title="Observed $x$ %s" % self.config.coupling_name, color='b')
             self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
             # Plot function output #
-        if train_result['epoch'] % self.config.save_plt_interval == 1:  #Don't forget fix that. This counter not depends on Epoch, just Frame counter
+        if self.num_frame % self.config.save_plt_interval == 0:  #Don't forget fix that. This counter not depends on Epoch, just Frame counter
             if self.config.save_plots and self.config.ndims >= 2:
                 self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
 
-            self.visualize_object.MakePlot(train_result['epoch'])
+            self.visualize_object.MakePlot(self.num_frame)
 
     def log_tensorboard_train_step(self, train_result):
         self.tb_writer.add_scalar('Train/Loss', train_result['loss'], self.integrator.global_step)
