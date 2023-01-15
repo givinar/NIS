@@ -275,7 +275,10 @@ class Integrator():
 
             start = time.time()
             x, absdet = self.flow(batch_z, batch_x.to(self.device))
+            #with torch.no_grad():
             #x, absdet = self.flow(batch_z, None)
+
+            absdet.requires_grad_(True)
             #y = self._func(x)
             logging.info(f'flow time: {time.time() - start}')
             # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
@@ -285,7 +288,6 @@ class Integrator():
             y = batch_y.to(self.device)
             #y.requires_grad_(False)    #Можно отключить и все ок
             #y = y + np.finfo(np.float32).eps
-
             #tt = y / absdet
             #mean = torch.mean(tt * tt)
             #var = torch.var(y * absdet)
@@ -293,7 +295,14 @@ class Integrator():
 
             cross = torch.nn.CrossEntropyLoss()
             loss = cross(absdet, y)
-
+            #kl = torch.nn.KLDivLoss()
+            #loss = kl(absdet, y)
+            #loss = torch.mean(y * torch.log(y / absdet))
+            #loss = torch.mean(y*y/absdet)
+            if torch.isnan(loss):
+                print("Nan")
+            if torch.isinf(loss):
+                print("Inf")
             #log_y = torch.log(y)
             #log_absdet = torch.log(absdet)
             mean = torch.mean(y / absdet)
@@ -312,7 +321,7 @@ class Integrator():
             start = time.time()
             loss.backward()
             logging.info(f'backward time: {time.time() - start}')
-            #print("\t" "Loss = %0.8f" % loss)
+            print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------
 
             if apply_optimizer:

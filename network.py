@@ -92,6 +92,7 @@ class UNet(nn.Module):
         self.num_layers = num_layers
 
         self.initial_layer = nn.Linear(in_features, max_hidden_features)
+        torch.nn.init.kaiming_uniform(self.initial_layer.weight, nonlinearity='relu')
 
         self.down_layers = nn.ModuleList([
             nn.Linear(
@@ -101,9 +102,14 @@ class UNet(nn.Module):
             for i in range(num_layers)
         ])
 
+        for l in self.down_layers:
+            torch.nn.init.kaiming_uniform(l.weight, nonlinearity='relu')
+
         self.middle_layer = nn.Linear(
             in_features=max_hidden_features // 2 ** num_layers,
             out_features=max_hidden_features // 2 ** num_layers)
+
+        torch.nn.init.kaiming_uniform(self.middle_layer.weight, nonlinearity='relu')
 
         self.up_layers = nn.ModuleList([
             nn.Linear(
@@ -113,6 +119,9 @@ class UNet(nn.Module):
             for i in range(num_layers - 1, -1, -1)
         ])
 
+        for l in self.up_layers:
+            torch.nn.init.kaiming_uniform(l.weight, nonlinearity='relu')
+
         self.final_layer = nn.Linear(max_hidden_features, out_features)
         self._output_activation = output_activation
 
@@ -121,6 +130,10 @@ class UNet(nn.Module):
             inputs = torch.cat((inputs, context), 1)
         temps = self.initial_layer(inputs)
         temps = self.nonlinearity(temps)
+
+        if temps.size(dim=0) > 1:
+            normalization = nn.BatchNorm1d(temps.size(dim=1))
+            temps = normalization(temps)
 
         down_temps = []
         for layer in self.down_layers:

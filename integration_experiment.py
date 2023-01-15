@@ -187,22 +187,30 @@ class TrainServer:
         if self.nis.train_sampling_call_difference == 1:
             self.nis.num_frame += 1
             print("Frame num: " + str(self.nis.num_frame))
-        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
-        #points = np.frombuffer(self.raw_data, dtype=np.float32).reshape(
-        #    (-1, 8 + 2))  # add vec2 light_sample_dir
+        #points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
+        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape(
+            (-1, 8 + 2))  # add vec2 light_sample_dir
         if self.hybrid_sampling:
-            #pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
-            #[samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
-            pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
-            [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
+            pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
+            [samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
+            #pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
+            #[samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
             if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            #if self.nis.num_frame != 1:
+            #if self.nis.train_sampling_call_difference == 1:
                 [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
                 self.samples_tensor = samples.clone().numpy()
                 samples[:, 0] = samples[:, 0] * 2 * np.pi
                 samples[:, 1] = torch.acos(samples[:, 1])
-                pdfs = (1 / (2 * np.pi)) / pdfs
+                #if self.nis.num_frame < 500:
+                #pdfs = (1 / (2 * np.pi)) / pdfs
+                if self.nis.num_frame <= 500:
+                    c = self.nis.num_frame / 500
+                    pdfs = 1 / (2 * np.pi) * (1 - c) + c * pdfs
             else:
+                #pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
+                #[samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
                 pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
                 [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
             #pdf_light_samples = pdf_light_samples / (2 * np.pi)
@@ -216,25 +224,33 @@ class TrainServer:
             #self.visualize_point.add_sample_with_pdf_infer([self.s1, self.s2], 1, "infer")
             #self.visualize_point.add_sample_with_pdf_infer([self.s1 / (2 * np.pi), np.cos(self.s2)], 1, "infer")
             #self.visualize_point.plot_pdf(self.middle_point)
-            #self.visualize_point.add_point(self.samples_tensor)
+            #self.visualize_point.add_point(samples.numpy())
 
         return [samples, pdf_light_samples, pdfs]  # lights, pdfs
 
     def make_train(self):
-        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3))
-        #context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, 8 + 3))
+        #context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3))
+        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, 8 + 3))
         context = context[~np.isnan(context).any(axis=1), :]
         if self.hybrid_sampling:
             pass
         else:
             if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            #if self.nis.num_frame != 1:
+            #if self.nis.train_sampling_call_difference == 1:
                 lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
+                #for l in lum:
+                #    if l > 100:
+                #        print("Lum: " + str(l))
+                #y = self.nis.function(torch.from_numpy(self.samples_tensor))
+                #lum[0] = y[0].item()
+                #lum[1] = y[1].item()
+                #lum[2] = y[2].item()
                 tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
                 tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1, dtype=np.float32)
                 train_result = self.nis.train(context=tdata)
             else:
                 pass
-            #self.visualize_point.add_sample_with_pdf_train([self.s1 / (2 * np.pi), np.cos(self.s2)], pdf, "train")
         self.nis.train_sampling_call_difference -= 1
 
     def process(self):
@@ -422,9 +438,9 @@ class NeuralImportanceSampling:
         return masks
 
     def get_samples(self, context):
-        pdf_light_sample = self.integrator.sample_with_context(context, inverse=True)
+        #pdf_light_sample = self.integrator.sample_with_context(context, inverse=True)
         [samples, pdf] = self.integrator.sample_with_context(context, inverse=False)
-        #pdf_light_sample = torch.ones(pdf.size())
+        pdf_light_sample = torch.ones(pdf.size())
         return [samples, pdf_light_sample, pdf]
 
     def train(self, context):
@@ -488,19 +504,26 @@ class NeuralImportanceSampling:
         dict_val = {'$I^{%s}$' % self.config.coupling_name: [mean_wgt, 0]}
         dict_error = {'$\sigma_{I}^{%s}$' % self.config.coupling_name: [err_wgt, 0]}
         dict_loss = {'$I^{I}^{%s}$': [err_wgt, 0]}
-        self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral value",
-                                        dict_val=dict_val)
-        self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral uncertainty",
-                                        dict_val=dict_error)
-        self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Loss",
-                                        dict_val=dict_error)
+        #self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral value",
+        #                                dict_val=dict_val)
+        #self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral uncertainty",
+        #                                dict_val=dict_error)
+        #self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Loss",
+        #                                dict_val=dict_loss)
         if self.config.save_plots and self.config.ndims >= 2:  # if 2D -> visualize distribution
             visualize_x = self.function_visualizer.add_trained_function_plot(x=train_result['x'].detach().numpy(),
                                                                         plot_name="Cumulative %s" % self.config.coupling_name)
             self.visualize_object.AddPointSet(visualize_x, title="Observed $x$ %s" % self.config.coupling_name, color='b')
-            self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
+            #self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
+
+            #grid_x1, grid_x2 = torch.meshgrid(torch.linspace(0, 1, 100), torch.linspace(0, 1, 100))
+            #grid = torch.cat([grid_x1.reshape(-1, 1), grid_x2.reshape(-1, 1)], axis=1)
+            #func_out = self.function(grid).reshape(100, 100)
+            #self.visualize_object.AddContour(grid_x1, grid_x2, func_out,
+            #                                 "Target function : " + self.function.name)
+
             # Plot function output #
-        if self.num_frame % self.config.save_plt_interval == 0:  #Don't forget fix that. This counter not depends on Epoch, just Frame counter
+        if self.num_frame % self.config.save_plt_interval == 0:
             if self.config.save_plots and self.config.ndims >= 2:
                 self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
 
