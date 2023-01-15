@@ -211,7 +211,7 @@ class Integrator():
         """
         if inverse:
             z = torch.tensor(context[:, 8:]).to(self.device)        # May be nan for some values. Check it on Hybrid side
-            is_nan = np.isnan(z).any(axis=1)
+            is_nan = np.isnan(z.cpu()).any(axis=1)
             if True in is_nan:
                 print("Attention! NANANANANA")
                 return torch.ones(context.shape[0]) / (2 * np.pi)

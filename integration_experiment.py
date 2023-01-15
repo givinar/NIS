@@ -20,6 +20,7 @@ import functions
 from network import MLP, UNet
 from transform import CompositeTransform
 from utils import pyhocon_wrapper, utils
+from utils.utils import cos_weight_vectorized
 from visualize import visualize, FunctionVisualizer, VisualizePoint
 
 # Using by server
@@ -79,6 +80,7 @@ class ExperimentConfig:
     num_training_steps: int = 16
     num_samples_per_training_step: int = 10_000
     max_train_buffer_size: int = 2_000_000
+    num_frames_pdf_merging: int = 2000
 
     save_plots: blob = True
     plot_dimension: int = 2
@@ -191,18 +193,32 @@ class TrainServer:
         #points = np.frombuffer(self.raw_data, dtype=np.float32).reshape(
         #    (-1, 8 + 2))  # add vec2 light_sample_dir
         if self.hybrid_sampling:
-            #pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
-            #[samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
-            pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
-            [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
+            pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
+            # [samples, pdfs] = utils.get_test_samples_cosine(points[:, 3:])  # lights(vec3), pdfs
+            [samples, pdfs] = utils.get_test_samples_vectorized(points)
+            # pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
+            # [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
-            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            # if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            if True:
                 [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
+                s = samples.cpu().detach().clone().numpy()
                 self.samples_tensor = samples.clone().numpy()
                 samples[:, 0] = samples[:, 0] * 2 * np.pi
                 samples[:, 1] = torch.acos(samples[:, 1])
+                if self.nis.num_frame < self.config.num_frames_pdf_merging:
+                    uniform_pdf = 1 / (2 * np.pi)
+                    # uniform_pdf_coeff = np.cos((np.pi / 2) * (self.nis.num_frame / self.config.num_frames_pdf_merging))
+                    uniform_pdf_coeff = np.cos((np.pi / 2) * (350 / 1000))
+
+                    norm = np.tile(np.array([0, 1, 0]), (points.shape[0], 1))
+                    # _, uniform_pdf = cos_weight_vectorized(s, norm)
+                    pdfs = uniform_pdf * uniform_pdf_coeff + (1 - uniform_pdf_coeff) * pdfs
                 pdfs = (1 / (2 * np.pi)) / pdfs
             else:
+                # pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
+                # [samples, pdfs] = utils.get_test_samples_vectorized(points)
+                # [samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
                 pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
                 [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
             #pdf_light_samples = pdf_light_samples / (2 * np.pi)
@@ -227,7 +243,8 @@ class TrainServer:
         if self.hybrid_sampling:
             pass
         else:
-            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            # if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            if True:
                 lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
                 tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
                 tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1, dtype=np.float32)
@@ -340,7 +357,7 @@ class NeuralImportanceSampling:
                                         flow=flow,
                                         dist=dist,
                                         optimizer=optimizer,
-                                        scheduler=scheduler,
+                                        # scheduler=scheduler,
                                         loss_func=self.config.loss_func)
 
         self.means =  []
