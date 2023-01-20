@@ -1,4 +1,7 @@
+import logging
 import sys
+import time
+
 import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader
@@ -57,7 +60,7 @@ class Integrator():
         # Initialize #
         self.flow.train()
         self.optimizer.zero_grad()
-        
+
         # Sample #
         z = self.dist.sample((nsamples,)).to(self.device)
         # log_prob = self.dist.log_prob(z)
@@ -68,19 +71,41 @@ class Integrator():
         x, absdet = self.flow(z)
         #absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
         y = self._func(x)
+        #y = y / y.max()
         y = y + np.finfo(np.float32).eps
-        #log_y = torch.log(y)
-        #log_absdet = torch.log(absdet)
-        #mean = torch.mean(-log_absdet - log_y)
+
+        #mean = torch.mean((y/absdet) * (y/absdet))
         #var = torch.var(y * absdet)
-        mean = torch.mean(y/absdet)
-        var = torch.var(y/absdet)
-        y = (y/mean).detach()
+        #loss = mean
+
+
+        #Cross-entropy
+        #cross = torch.nn.CrossEntropyLoss()
+        #loss = cross(absdet, y)
+        #log_absdet = torch.log(absdet)
+        #tmp = y * log_absdet
+        #cross_entropy = torch.mean(tmp)
+        #loss = cross_entropy
+        #mean = torch.mean(y * absdet)
+        #var = torch.var(y * absdet)
+
+        # Test from Dinh
+        log_y = torch.log(y)
+        log_absdet = torch.log(absdet)
+        mean = torch.mean(-log_absdet - log_y)
+        var = torch.var(y * absdet)
+        loss = mean
+
+        #Was implemented
+        #mean = torch.mean(y/absdet)
+        #var = torch.var(y/absdet)
+        #y = (y/mean).detach()
 
         # Backprop #
-        loss = self.loss_func(y,absdet)
-        #loss = mean
+        #loss = self.loss_func(y,absdet)
+
         loss.backward()
+
         self.optimizer.step()
         if self.scheduler is not None:
             self.scheduler.step(self.global_step)
@@ -172,7 +197,7 @@ class Integrator():
 
         return (y/absdet).to('cpu')
 
-    def sample_with_context(self, context: np.ndarray, jacobian: bool = False):
+    def sample_with_context(self, context: np.ndarray, inverse: bool = False):
         """
         Sample from the trained distribution with context for transform network.
 
@@ -184,61 +209,86 @@ class Integrator():
             tf.tensor of size (context.shape[0], ndim) of sampled points, and jacobian(optional).
 
         """
-        z = self.dist.sample((context.shape[0],)).to(self.device)
-        list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context)))
-        with torch.no_grad():
-            x, absdet = self.flow(z, context=torch.tensor(context).to(self.device))
-        if jacobian:
-            return (x.to('cpu'), absdet.to('cpu'))
+        if inverse:
+            z = torch.tensor(context[:, 8:]).to(self.device)        # May be nan for some values. Check it on Hybrid side
+            z[:, 0] = z[:, 0] / (2 * np.pi) #phi
+            z[:, 1] = np.abs(np.cos(z[:, 1].cpu()))       #theta
+            with torch.no_grad():
+                #x, absdet = self.flow.inverse(z, context=torch.tensor(context[:, :8]).to(self.device))
+                #x, absdet = self.flow.inverse(z, context=torch.tensor(context[:, :3]).to(self.device))
+                x, absdet = self.flow.inverse(z, context=None)
+            return 1/absdet.to('cpu')
         else:
-            return x.to('cpu')
+            z = self.dist.sample((context.shape[0],)).to(self.device)
+            list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context[:, [0,1,2]])))
+            with torch.no_grad():
+                #x, absdet = self.flow(z, context=torch.tensor(context[:, :8]).to(self.device))
+                #x, absdet = self.flow(z, context=torch.tensor(context[:, :3]).to(self.device))
+                x, absdet = self.flow(z, context=None)
+            return (x.to('cpu'), absdet.to('cpu'))
 
-    def train_with_context(self, context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
+    def train_with_context(self, z_context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
                            apply_optimizer=True) -> list:
         # Initialize #
         self.flow.train()
-
+        self.optimizer.zero_grad()
 
         # Sample #
-        # z = self.dist.sample((context.shape[0],)).to(self.device)
-        z = torch.stack([self.z_mapper[row.tobytes()] for row in context[:, :-1]])
-        # log_prob = self.dist.log_prob(z)
-        # In practice for uniform dist, log_prob = 0 and absdet is multiplied by 1
-        # But in the future we might change sampling dist so good to have
+        z = z_context[0]
+        context = z_context[1]
 
         # Process #
+        #context_x = context[:, :3]     #only coords
         context_x = context[:, :-1]
         context_y = context[:, -1]
         train_result = []
-        for batch_x, batch_y, batch_z in DataLoader(dataset=TensorDataset(torch.Tensor(context_x),
-                                                                          torch.Tensor(context_y),
-                                                                          z),
-                                           batch_size=batch_size):
+        start = time.time()
+        context_x = torch.Tensor(context_x)
+        logging.info(f'context_x time: {time.time() - start}')
+        start = time.time()
 
-            x, absdet = self.flow(batch_z, batch_x.to(self.device))
+        context_y = torch.Tensor(context_y)
+        logging.info(f'context_y time: {time.time() - start}')
+        start = time.time()
+        for batch_x, batch_y, batch_z in [(context_x, context_y, z)]:
+            logging.info(f'batch time: {time.time() - start}')
+
+            start = time.time()
+            #x, absdet = self.flow(batch_z, batch_x.to(self.device))
+            x, absdet = self.flow(batch_z, None)
+
+            absdet.requires_grad_(True)
+            #y = self._func(x)
+            logging.info(f'flow time: {time.time() - start}')
             # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
 
             # --------------- START TODO compute loss ---------------
+            start = time.time()
             y = batch_y.to(self.device)
-            y = y + np.finfo(np.float32).eps
 
-            log_y = torch.log(y)
-            log_absdet = torch.log(absdet)
-            #mean = torch.mean(y / absdet)
-            mean = torch.mean(-log_absdet - log_y)
-            var = torch.var(y * absdet)
-            #var = torch.var(y / absdet)
-            #y = (y / mean).detach()
+            cross = torch.nn.CrossEntropyLoss()
+            loss = cross(absdet, y)
+            mean = torch.mean(y / absdet)
+            var = torch.var(y / absdet)
+
+            if var == 0:
+                var += np.finfo(np.float32).eps
 
             # Backprop #
             #loss = self.loss_func(y, absdet)
-            loss = mean
+            logging.info(f'loss time: {time.time() - start}')
+
+            start = time.time()
             loss.backward()
-            #print("\t" "Loss = %0.8f" % loss)
+            logging.info(f'backward time: {time.time() - start}')
+            print("\t" "Loss = %0.8f" % loss)
             # --------------- END TODO compute loss ---------------
 
             if apply_optimizer:
+                start = time.time()
+
                 self.apply_optimizer()
+                logging.info(f'optimizer time: {time.time() - start}')
 
             # Integral #
             return_dict = {'loss': loss.to('cpu').item(), 'epoch': self.global_step}
@@ -256,8 +306,10 @@ class Integrator():
 
     def apply_optimizer(self):
         self.optimizer.step()
-        self.optimizer.zero_grad()
-
+        #self.z_mapper = {}             #Be careful with z_mapper
         if self.scheduler is not None:
             self.scheduler.step(self.scheduler_step)
             self.scheduler_step += 1
+
+    def generate_z_by_context(self, context):
+        return [self.z_mapper[row.tobytes()] for row in context[:, [0,1,2]]]

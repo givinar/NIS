@@ -210,13 +210,13 @@ def cartesian_to_spherical(vec: np.ndarray):
     if phi < 0:
         phi += 2 * math.pi
     theta = math.acos(vec[1])
-    return np.array([theta, phi])
+    return np.array([phi, theta])
 
 def cartesian_to_spherical_vectorized(vec: np.ndarray):
     phi = np.arctan2(vec[:, 2], vec[:, 0])
     phi = np.array(list(map(lambda t: t + 2 * np.pi if t < 0 else t, phi)))
     theta = np.arccos(vec[:, 1])
-    return np.vstack([theta, phi]).T
+    return np.vstack([phi, theta]).T
 
 # Maps sample in the unit square onto a hemisphere,
 # defined by a normal vector with a cosine-weighted distribution
@@ -241,6 +241,7 @@ def cos_weight(s: np.ndarray, n: np.ndarray, e=1.):
     norm_vec = vec / np.linalg.norm(vec)
     pdf = norm_vec[1] / np.pi
     light = cartesian_to_spherical(norm_vec)
+
     # Return the result
     return light, pdf
 
@@ -266,18 +267,28 @@ def cos_weight_vectorized(s: np.ndarray, n: np.ndarray, e=1.):
     norm_vec = vec / np.linalg.norm(vec, axis=1)[:, None]
     pdf = norm_vec[:, 1] / np.pi
     light = cartesian_to_spherical_vectorized(norm_vec)
+
     # Return the result
     return light, pdf
 
 def uniform(eps: np.ndarray):
-    eps[0] = math.acos(eps[0])
-    eps[1] *= 2 * math.pi
+    eps[0] *= 2 * math.pi
+    eps[1] = math.acos(eps[1])
     pdf = 1 / (2 * np.pi)
     return eps, pdf
 
-# Getting samples similar to HIBRID
-def get_test_samples(points: np.ndarray):
+def spherical_to_cartesian(lights: np.ndarray):
+    light_sample_dir_phi = lights[:, 0]
+    light_sample_dir_theta = lights[:, 1]
+    y = np.cos(light_sample_dir_theta)
+    return y
 
+def get_pdf_by_samples_cosine(lights: np.ndarray):
+    y = spherical_to_cartesian(lights)
+    return torch.from_numpy(y / np.pi)
+
+# Getting samples similar to HIBRID
+def get_test_samples_cosine(points: np.ndarray):
     norm_pts = points[:, 3:]
     lights = np.zeros([norm_pts.shape[0], 2], dtype=np.float32)
     pdfs = np.zeros(norm_pts.shape[0], dtype=np.float32)
@@ -286,17 +297,33 @@ def get_test_samples(points: np.ndarray):
         s = np.random.uniform(0., 1., 2)
         norm = np.array([0, 1, 0])
         [light, pdf] = cos_weight(s, norm)
-        #[light, pdf] = uniform(s)
+        lights[i] = light
+        pdfs[i] = pdf
+    return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]
+
+def get_pdf_by_samples_uniform(lights: np.ndarray):
+    y = np.ones(lights.shape[0])
+    return torch.from_numpy(y / (2 * np.pi))
+
+# Getting samples similar to HIBRID
+def get_test_samples_uniform(points: np.ndarray):
+    norm_pts = points[:, 3:]
+    lights = np.zeros([norm_pts.shape[0], 2], dtype=np.float32)
+    pdfs = np.zeros(norm_pts.shape[0], dtype=np.float32)
+
+    for i in range(norm_pts.shape[0]):
+        s = np.random.uniform(0., 1., 2)
+        norm = np.array([0, 1, 0])
+        [light, pdf] = uniform(s)
         lights[i] = light
         pdfs[i] = pdf
     return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]
 
 
 def get_test_samples_vectorized(points: np.ndarray):
-
     points = points
     s = np.random.uniform(0., 1., (points.shape[0], 2))
     norm = np.tile(np.array([0, 1, 0]), (points.shape[0], 1))
     [lights, pdfs] = cos_weight_vectorized(s, norm)
 
-    return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]
+    return [torch.from_numpy(lights.astype(np.float32)).to('cpu'), torch.from_numpy(pdfs.astype(np.float32)).to('cpu')]

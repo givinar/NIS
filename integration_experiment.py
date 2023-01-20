@@ -1,6 +1,9 @@
 import argparse
+import math
 import os
+import random
 import sys
+import time
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Union
@@ -17,13 +20,15 @@ import functions
 from network import MLP, UNet
 from transform import CompositeTransform
 from utils import pyhocon_wrapper, utils
-from visualize import visualize, FunctionVisualizer
+from utils.utils import cos_weight_vectorized
+from visualize import visualize, FunctionVisualizer, VisualizePoint
 
 # Using by server
 import socket
 from enum import Enum
 from collections import namedtuple
 import logging
+from collections import OrderedDict
 
 Request = namedtuple('Request', 'name length')
 
@@ -72,6 +77,9 @@ class ExperimentConfig:
     batch_size: int = 2000
     gradient_accumulation: bool = True
     hybrid_sampling: bool = False
+    num_training_steps: int = 16
+    num_samples_per_training_step: int = 10_000
+    max_train_buffer_size: int = 2_000_000
 
     save_plots: blob = True
     plot_dimension: int = 2
@@ -80,7 +88,6 @@ class ExperimentConfig:
     use_tensorboard: bool = False
     host: str = '127.0.0.1'
     port: int = 65432
-    hybrid_sampling: bool = False
 
     @classmethod
     def init_from_pyhocon(cls, pyhocon_config: pyhocon_wrapper.ConfigTree):
@@ -99,6 +106,10 @@ class ExperimentConfig:
                                 experiment_dir_name=pyhocon_config.get_string('logging.plot_dir_name',
                                                                               cls.experiment_dir_name),
                                 hybrid_sampling=pyhocon_config.get_bool('train.hybrid_sampling', False),
+                                num_training_steps=pyhocon_config.get_int('train.num_training_steps', 16),
+                                num_samples_per_training_step=pyhocon_config.get_int('train.num_samples_per_training_step', 10_000),
+                                max_train_buffer_size=pyhocon_config.get_int('train.max_train_buffer_size', 2_000_000),
+
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
                                 num_context_features=pyhocon_config.get_int('train.num_context_features'),
@@ -136,6 +147,14 @@ class TrainServer:
         self.nis = NeuralImportanceSampling(_config)
         self.hybrid_sampling = self.config.hybrid_sampling
 
+        self.visualize_point = VisualizePoint(index=0.5, plot_step=10, nis=self.nis)
+
+        self.s1 = 0
+        self.s2 = 0
+        self.pdf = 0
+        self.middle_point = None
+        self.samples_tensor = None
+
     def connect(self):
         print(f"Waiting for connection by {self.host}")
         self.connection, address = self.sock.accept()
@@ -146,6 +165,7 @@ class TrainServer:
 
     def receive_length(self):
         self.length = int.from_bytes(self.connection.recv(4), 'little')
+        #print(str(self.length))
 
     def receive_raw(self):
         self.raw_data = bytearray()
@@ -164,30 +184,62 @@ class TrainServer:
             logging.error(f"Client was disconnected suddenly while sending\n")
 
     def make_infer(self):
-        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features))
+        self.nis.train_sampling_call_difference += 1
+        if self.nis.train_sampling_call_difference == 1:
+            self.nis.num_frame += 1
+            print("Frame num: " + str(self.nis.num_frame))
+        #points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
+        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, 8 + 2))  # Temporal solution for ignoring processing additional inputs in NN
         if self.hybrid_sampling:
-            [samples, pdfs] = utils.get_test_samples_vectorized(points)  # lights(vec3), pdfs
+            pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
+            [samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
+            #pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
+            #[samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
-            [samples, pdfs] = self.nis.get_samples(points)
-            samples[:, 0] = torch.acos(samples[:, 0])
-            samples[:, 1] = samples[:, 1] * 2 * np.pi
-            pdfs /= 2 * np.pi
+            # Skip the first frame. Also processing only first bounce
+            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+                [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
+                s = samples.cpu().detach().clone().numpy()
+                self.samples_tensor = samples.clone().numpy()
+                samples[:, 0] = samples[:, 0] * 2 * np.pi
+                samples[:, 1] = torch.acos(samples[:, 1])
 
-        logging.debug("s1 = %s, s2 = %s, s_last = %s", samples[0, :].numpy(), samples[1, :].numpy(), samples[-1, :].numpy())
-        logging.debug("pdf1 = %s, pdf2 = %s, pdf_last = %s", pdfs[0].numpy(), pdfs[1].numpy(), pdfs[-1].numpy())
+                # MIS should be implemented here
+                #pdfs = (1 / (2 * np.pi)) / pdfs
+                #pdf_light_samples = pdf_light_samples / (2 * np.pi)
+                #if self.nis.num_frame < 100:
+                #    pdfs = torch.ones(pdfs.size())
+                #    pdfs /= (2 * np.pi)
+                #    pdf_light_samples = torch.ones(pdfs.size())
+                #    pdf_light_samples /= (2 * np.pi)
+            else:
+                #pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
+                #[samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
+                pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
+                [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
 
-        return [samples, pdfs]  # lights, pdfs
+        return [samples, pdf_light_samples, pdfs]
 
     def make_train(self):
-        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3 + 3))
+        #context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3))
+        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, 8 + 3))
+        context = context[~np.isnan(context).any(axis=1), :]
         if self.hybrid_sampling:
             pass
         else:
-            lum = context[:, 0] + context[:, 1] + context[:, 2]
-            tdata = context[:, [3, 4, 5, 6, 7, 8]]
-            tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1,
-                                   dtype=np.float32)
-            train_result = self.nis.train(context=tdata)
+            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+                lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
+                # Checking the Gaussian distribution
+                #y = self.nis.function(torch.from_numpy(self.samples_tensor))
+                #lum[0] = y[0].item()
+                #lum[1] = y[1].item()
+                #lum[2] = y[2].item()
+                tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
+                tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1, dtype=np.float32)
+                train_result = self.nis.train(context=tdata)
+            else:
+                pass
+        self.nis.train_sampling_call_difference -= 1
 
     def process(self):
         try:
@@ -197,14 +249,15 @@ class TrainServer:
                 self.make_train()
                 self.connection.send(self.data_ok.name)
             elif self.mode == Mode.INFERENCE:
-                [samples, pdfs] = self.make_infer()
+                [samples, pdf_light_samples, pdfs] = self.make_infer()
                 self.connection.send(self.put_infer.name)
                 answer = self.connection.recv(self.put_infer_ok.length)
                 if answer == self.put_infer_ok.name:
                     raw_data = bytearray()
                     s = samples.cpu().detach().numpy()
-                    z = torch.zeros(s.shape[0])
-                    s = np.concatenate((s, z.reshape([len(z), 1])), axis=1, dtype=np.float32)
+                    pls = pdf_light_samples.cpu().detach().numpy()
+                    pls[pls<0] = 0
+                    s = np.concatenate((s, pls.reshape([len(pls), 1])), axis=1, dtype=np.float32)
                     p = pdfs.cpu().detach().numpy().reshape([-1, 1])
                     raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
                     self.connection.send(len(raw_data).to_bytes(4, 'little'))
@@ -259,16 +312,21 @@ class NeuralImportanceSampling:
         self.integrator = None
         self.visualize_object = None
         self.function_visualizer = None
+        self.time = time.time()
+        self.num_frame = 0
 
         # need for gradient accumulation: we apply optimizer.step() only once after the last training call
         self.train_sampling_call_difference = 0
+        self.z_buffer = None
+        self.context_buffer = None
 
     def initialize(self, mode='server'):
         """
         mode: ['server', 'experiment'] - if mode==server, don't use dimension reduction and function in visualization
         """
         self.function: functions.Function = getattr(functions, self.config.funcname)(n=self.config.ndims)
-        masks = self.create_binary_mask(self.config.ndims)
+        #masks = self.create_binary_mask(self.config.ndims)
+        masks = [[1., 0.], [0., 1.], [1., 0.], [0., 1]]
         flow = CompositeTransform([self.create_base_transform(mask=mask,
                                                               coupling_name=self.config.coupling_name,
                                                               hidden_dim=self.config.hidden_dim,
@@ -281,13 +339,12 @@ class NeuralImportanceSampling:
         dist = torch.distributions.uniform.Uniform(torch.tensor([0.0] * self.config.ndims),
                                                    torch.tensor([1.0] * self.config.ndims))
         optimizer = torch.optim.Adam(flow.parameters(), lr=self.config.lr)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.config.epochs)
-
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.config.epochs) # For Adam we don't need the scheduler
         self.integrator = Integrator(func=self.function,
                                         flow=flow,
                                         dist=dist,
                                         optimizer=optimizer,
-                                        scheduler=scheduler,
+                                        scheduler=None,
                                         loss_func=self.config.loss_func)
 
         self.means =  []
@@ -318,16 +375,17 @@ class NeuralImportanceSampling:
                                                                             out_shape=[out_features],
                                                                             hidden_sizes=[hidden_dim] * n_hidden_layers,
                                                                             hidden_activation=nn.ReLU(),
-                                                                            output_activation=nn.Sigmoid())
+                                                                            output_activation=None)
         elif network_type.lower() == 'unet':
             transform_net_create_fn = lambda in_features, out_features: UNet(in_features=in_features,
                                                                              out_features=out_features,
                                                                              max_hidden_features=256,
                                                                              num_layers=n_hidden_layers,
                                                                              nonlinearity=nn.ReLU(),
-                                                                             output_activation=nn.Sigmoid())
+                                                                             output_activation=None)
         else:
             raise ValueError(f"network_type argument should be in [mlp, unet], but given {network_type}")
+
         if coupling_name == 'additive':
             return AdditiveCouplingTransform(mask, transform_net_create_fn, blob,
                                              num_context_features=num_context_features)
@@ -368,22 +426,59 @@ class NeuralImportanceSampling:
         return masks
 
     def get_samples(self, context):
-        self.train_sampling_call_difference += 1
-        return self.integrator.sample_with_context(context, jacobian=True)
+        #pdf_light_sample = self.integrator.sample_with_context(context, inverse=True)
+        [samples, pdf] = self.integrator.sample_with_context(context, inverse=False)
+        pdf_light_sample = torch.ones(pdf.size())
+        return [samples, pdf_light_sample, pdf]
 
     def train(self, context):
-        self.train_sampling_call_difference -= 1
-        train_result = self.integrator.train_with_context(context=context, lr=False, integral=True, points=True,
-                                                          batch_size=self.config.batch_size,
-                                                          apply_optimizer=not self.config.gradient_accumulation)
-        for epoch_result in train_result:
-            if self.visualize_object:
-                self.visualize_train_step(epoch_result)
-            if self.config.use_tensorboard:
-                self.log_tensorboard_train_step(epoch_result)
-        if self.config.gradient_accumulation and self.train_sampling_call_difference == 0:
+        z = torch.stack(self.integrator.generate_z_by_context(context))
+        context = torch.tensor(context)
+        if self.z_buffer is None:
+            self.z_buffer = z
+        else:
+            self.z_buffer = torch.cat((self.z_buffer, z), 0)
+        #print("Z buffer length: " + str(len(self.z_buffer)))
+        if self.context_buffer is None:
+            self.context_buffer = context
+        else:
+            self.context_buffer = torch.cat((self.context_buffer, context), 0)
+
+        #if self.train_sampling_call_difference == 1:
+        if self.context_buffer.size()[0] > self.config.max_train_buffer_size:
+            self.context_buffer = self.context_buffer[-self.config.max_train_buffer_size:]
+            self.z_buffer = self.z_buffer[-self.config.max_train_buffer_size:]
+        train_results = []
+        for epoch in range(self.config.num_training_steps):
+            start = time.time()
+            indices = torch.randperm(len(self.context_buffer))[:self.config.num_samples_per_training_step]
+            epoch_z_context = (self.z_buffer[indices], self.context_buffer[indices])
+            logging.info(f"epoch_z_context time: {time.time() - start}")
+            start = time.time()
+            train_result = self.integrator.train_with_context(z_context=epoch_z_context, lr=False, integral=True,
+                                                                  points=True,
+                                                                  batch_size=self.config.batch_size,
+                                                                  apply_optimizer=not self.config.gradient_accumulation)
+
+
+            logging.info(f"Epoch time: {time.time() - start}")
+            train_results.extend(train_result)
+            if self.train_sampling_call_difference == 1:    # Test for first bounce (Just check middle pixel)
+                for epoch_result in train_result:
+                    if self.visualize_object:
+                        self.visualize_train_step(epoch_result)
+                    if self.config.use_tensorboard:
+                        self.log_tensorboard_train_step(epoch_result)
+
+        if self.config.gradient_accumulation:
             self.integrator.apply_optimizer()
-        return train_result
+
+        if self.train_sampling_call_difference == 1:
+            self.integrator.z_mapper = {}                   #Be careful with z_mapper
+
+        #print("Frame computed: ", time.time() - self.time)
+        self.time = time.time()
+        return train_results
 
     def visualize_train_step(self, train_result):
 
@@ -398,23 +493,30 @@ class NeuralImportanceSampling:
         dict_val = {'$I^{%s}$' % self.config.coupling_name: [mean_wgt, 0]}
         dict_error = {'$\sigma_{I}^{%s}$' % self.config.coupling_name: [err_wgt, 0]}
         dict_loss = {'$I^{I}^{%s}$': [err_wgt, 0]}
-        self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral value",
-                                        dict_val=dict_val)
-        self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral uncertainty",
-                                        dict_val=dict_error)
-        self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Loss",
-                                        dict_val=dict_error)
+        #self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral value",
+        #                                dict_val=dict_val)
+        #self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral uncertainty",
+        #                                dict_val=dict_error)
+        #self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Loss",
+        #                                dict_val=dict_loss)
         if self.config.save_plots and self.config.ndims >= 2:  # if 2D -> visualize distribution
             visualize_x = self.function_visualizer.add_trained_function_plot(x=train_result['x'].detach().numpy(),
                                                                         plot_name="Cumulative %s" % self.config.coupling_name)
             self.visualize_object.AddPointSet(visualize_x, title="Observed $x$ %s" % self.config.coupling_name, color='b')
-            self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
+            #self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
+
+            #grid_x1, grid_x2 = torch.meshgrid(torch.linspace(0, 1, 100), torch.linspace(0, 1, 100))
+            #grid = torch.cat([grid_x1.reshape(-1, 1), grid_x2.reshape(-1, 1)], axis=1)
+            #func_out = self.function(grid).reshape(100, 100)
+            #self.visualize_object.AddContour(grid_x1, grid_x2, func_out,
+            #                                 "Target function : " + self.function.name)
+
             # Plot function output #
-        if train_result['epoch'] % self.config.save_plt_interval == 0:
+        if self.num_frame % self.config.save_plt_interval == 0:
             if self.config.save_plots and self.config.ndims >= 2:
                 self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
 
-            self.visualize_object.MakePlot(train_result['epoch'])
+            self.visualize_object.MakePlot(self.num_frame)
 
     def log_tensorboard_train_step(self, train_result):
         self.tb_writer.add_scalar('Train/Loss', train_result['loss'], self.integrator.global_step)

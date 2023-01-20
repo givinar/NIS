@@ -24,6 +24,7 @@ def linear_spline(inputs, unnormalized_pdf,
     Reference:
     > Müller et al., Neural Importance Sampling, arXiv:1808.03856, 2018.
     """
+    device = inputs.get_device() if inputs.is_cuda else torch.device('cpu')
     if not inverse and (torch.min(inputs) < left or torch.max(inputs) > right):
         raise RuntimeError("Input of forward linear spline outside of domain")
     elif inverse and (torch.min(inputs) < bottom or torch.max(inputs) > top):
@@ -44,7 +45,7 @@ def linear_spline(inputs, unnormalized_pdf,
     if inverse:
         inv_bin_idx = utils.searchsorted(cdf, inputs)
 
-        bin_boundaries = (torch.linspace(0, 1, num_bins+1)
+        bin_boundaries = (torch.linspace(0, 1, num_bins+1, device=device)
                           .view([1] * inputs.dim() + [-1])
                           .expand(*inputs.shape, -1))
 
@@ -84,7 +85,7 @@ def linear_spline(inputs, unnormalized_pdf,
         outputs = outputs * (top - bottom) + bottom
         logabsdet = logabsdet + math.log(top - bottom) - math.log(right - left)
     #absdet = torch.exp(-logabsdet)
-    absdet = torch.exp(logabsdet)
+    absdet = torch.exp(-logabsdet)
     return outputs, absdet
 
 def quadratic_spline(inputs,

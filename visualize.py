@@ -85,7 +85,7 @@ class visualize:
         Nv = int(N_data != 0) + int(N_cont != 0) + int(N_plot_3d != 0) + int(N_hist != 0) + int(N_curv != 0)
         fig, axs = plt.subplots(Nv,Nh,figsize=(Nh*6,Nv*6))
         plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.9, wspace=0.2, hspace=0.2)
-        fig.suptitle("Epoch %d"%epoch,fontsize=22)
+        fig.suptitle("Frame %d"%epoch,fontsize=22)
 
         if Nv == 1: # Turn the ax vector into array
             axs = axs.reshape(1,-1)
@@ -265,3 +265,111 @@ class FunctionVisualizer:
             self.vis_object.Add3dPlot(x_centers, y_centers, z_centers, bins, plot_name)
             return visualize_x
 
+
+class VisualizePoint():
+
+    def __init__(self, index, nis, plot_step=10, path=os.path.join('logs', 'point_plot')):
+        self.context = None
+        self.path = path
+        os.makedirs(path, exist_ok=True)
+        self.bins = None
+        self.index = index
+        #self.plot_step = plot_step
+        self.plot_step = 10
+        self.points = []
+        self.iteration = 0
+        self.iteration_train = 0
+        self.iteration_infer = 0
+        self.iteration_plot_pdf = 0
+        self.nis = nis
+
+        self.resolution = 100
+        self.plot_array_infer = np.zeros((self.resolution, self.resolution))
+        self.plot_array_train = np.zeros((self.resolution, self.resolution))
+
+    def add_point(self, points: np.ndarray):
+        self.points.append(points[int(points.shape[0]*self.index)])
+        self.iteration += 1
+        if self.iteration % self.plot_step == 0:
+            self.plot_points()
+
+    def plot_points(self):
+        visualize_x = np.array(self.points)
+        #bins, x_edges, y_edges = np.histogram2d(visualize_x[:, 0], visualize_x[:, 1], bins=100,
+        #                                        range=[[0, 2 * np.pi], [0, np.pi / 2]])
+        bins, x_edges, y_edges = np.histogram2d(visualize_x[:, 0], visualize_x[:, 1], bins=100,
+                                                range=[[0, 1], [0, 1]])
+        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+        x_centers, y_centers = np.meshgrid(x_centers, y_centers)
+
+        fig, ax = plt.subplots()
+        ax.set_title("Point distribution", fontsize=20)
+        ax.contourf(x_centers, y_centers, bins, 20)
+        temporal_path = os.path.join(self.path, "samples")
+        path_fig = os.path.join(temporal_path, "frame_%04d.png"%self.iteration)
+        fig.savefig(path_fig)
+        plt.close(fig)
+
+    def add_sample_with_pdf_infer(self, points: np.ndarray, pdf, subdir: str):
+        ix = math.trunc(self.resolution * points[0])
+        iy = math.trunc(self.resolution * points[1])
+        #ix = math.trunc((self.resolution / (2 * np.pi)) * points[0])
+        #iy = math.trunc((self.resolution / (np.pi / 2)) * points[1])
+        self.plot_array_infer[ix, iy] += pdf
+
+        #self.plot_array_infer = self.plot_array_infer / self.plot_array_infer.max()
+
+        self.iteration_infer += 1
+        if self.iteration_infer % self.plot_step == 0:
+            fig, ax = plt.subplots()
+            ax.set_title("Point distribution NIS", fontsize=20)
+            ax.imshow(self.plot_array_infer.T, interpolation='bilinear', origin='lower')
+            temporal_path = os.path.join(self.path, subdir)
+            path_fig = os.path.join(temporal_path, "frame_%04d.png" % self.iteration_infer)
+            fig.savefig(path_fig)
+            plt.close(fig)
+
+    def add_sample_with_pdf_train(self, points: np.ndarray, pdf, subdir: str):
+        ix = math.trunc(self.resolution * points[0])
+        iy = math.trunc(self.resolution * points[1])
+        #ix = math.trunc((self.resolution / (2 * np.pi)) * points[0])
+        #iy = math.trunc((self.resolution / (np.pi / 2)) * points[1])
+        self.plot_array_train[ix, iy] = pdf
+
+        #self.plot_array_infer = self.plot_array_infer / self.plot_array_infer.max()
+        extent = [0, 1, 0, 1]
+        self.iteration_train += 1
+        if self.iteration_train % self.plot_step == 0:
+            fig, ax = plt.subplots()
+            ax.set_title("Point distribution Hybrid", fontsize=20)
+            ax.imshow(self.plot_array_train.T, interpolation='bilinear',
+                 extent=None, origin='lower')
+            temporal_path = os.path.join(self.path, subdir)
+            path_fig = os.path.join(temporal_path, "frame_%04d.png" % self.iteration_train)
+            fig.savefig(path_fig)
+            plt.close(fig)
+
+    def plot_pdf(self, samples):
+        plot_array = np.zeros((50, 50))
+        if self.context is None:
+            self.context = samples[int(samples.shape[0]*self.index)]
+        self.iteration_plot_pdf += 1
+        if self.iteration_plot_pdf % 50 != 0:
+            return
+        for xi, x in enumerate(np.linspace(0, 2 * np.pi, plot_array.shape[0])):
+            for yi, y in enumerate(np.linspace(0, np.pi / 2, plot_array.shape[1])):
+                self.context[8] = x
+                self.context[9] = y
+                plot_array[xi, yi] = self.nis.integrator.sample_with_context(np.expand_dims(self.context, 0),
+                                                                             inverse=True)
+                plot_array[xi, yi] /= (2 * np.pi)
+
+        plot_array = plot_array / plot_array.max()
+        fig, ax = plt.subplots()
+        ax.set_title("Point distribution", fontsize=20)
+        ax.imshow(plot_array.T, interpolation='bilinear', origin='lower')
+        temporal_path = os.path.join(self.path, "invers")
+        path_fig = os.path.join(temporal_path,"frame_%04d.png"%self.iteration_plot_pdf)
+        fig.savefig(path_fig)
+        plt.close(fig)

@@ -29,7 +29,7 @@ class Client:
         self.length = 0
 
         # Just for tests
-        self.ndims = 3
+        self.ndims = 2
         self.funcname = 'Gaussian'
         self.function: functions.Function = getattr(functions, self.funcname)(n=self.ndims)
 
@@ -57,12 +57,14 @@ class Client:
 
     def get_samples(self):
         print("----> Infer")
-        points = np.random.random((self.num_points, 9)).astype(np.float32)  # pos_x, pos_y, pos_z, norm_x, norm_y, norm_z, dir_x, dir_y, dir_z
-                                                                            # dir_? right now is not taken into account right now
-        self.client_socket.send(len(points[:, [0, 1, 2, 3, 4, 5]].tobytes()).to_bytes(4, 'little'))  # bytes
+        points = np.random.random((self.num_points, 10)).astype(np.float32)  # pos_x, pos_y, pos_z, norm_x, norm_y, norm_z,
+                                                                             # outgoing_phi, outgoing_theta
+                                                                             # light_sample_dir_theta, light_sample_dir_phi
+                                                                             # dir_? is not taken into account right now
+        self.client_socket.send(len(points.tobytes()).to_bytes(4, 'little'))  # bytes
 
         raw_data = bytearray()
-        raw_data.extend(points[:, [0, 1, 2, 3, 4, 5]].tobytes())
+        raw_data.extend(points.tobytes())
         self.client_socket.send(raw_data)
 
         data = self.client_socket.recv(self.put_infer.length)
@@ -79,17 +81,17 @@ class Client:
 
     def send_radiance(self):
         print("----> Train")
-        t_data = torch.tensor(self.points_data[:, [9, 10, 11]]) # s1, s2, s3
+        t_data = torch.tensor(self.points_data[:, [10, 11]]) # s1, s82
         t_y = self.function(t_data)
         y = t_y.cpu().detach().numpy()
         lum = np.stack((y,) * 3, axis=-1)
         scale = np.array([3, 3, 3])
         lum = lum / scale
         self.points_data = np.concatenate((self.points_data, lum.reshape([len(lum), 3])), axis=1, dtype=np.float32)
-        self.client_socket.send(len(self.points_data[:, [13,14,15,0,1,2,3,4,5,6,7,8]].tobytes()).to_bytes(4, 'little'))  # bytes
+        self.client_socket.send(len(self.points_data[:, [14, 15, 16 ,0 , 1, 2, 3, 4, 5, 6, 7]].tobytes()).to_bytes(4, 'little'))  # bytes
 
         raw_data = bytearray()
-        raw_data.extend(self.points_data[:, [13,14,15,0,1,2,3,4,5,6,7,8]].tobytes())    #send r,g,b x, y, z, norm_x, norm_y, norm_z, dir_x, dir_y, dir_z
+        raw_data.extend(self.points_data[:, [14, 15, 16 ,0 , 1, 2, 3, 4, 5, 6, 7]].tobytes())    #send r,g,b x, y, z, norm_x, norm_y, norm_z, dir_x, dir_y, dir_z
         self.client_socket.send(raw_data)
 
         answer = self.client_socket.recv(self.data_ok.length)
