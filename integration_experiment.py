@@ -382,7 +382,7 @@ class NeuralImportanceSampling:
                                                                              max_hidden_features=256,
                                                                              num_layers=n_hidden_layers,
                                                                              nonlinearity=nn.ReLU(),
-                                                                             output_activation=nn.Softmax())
+                                                                             output_activation=None)
         else:
             raise ValueError(f"network_type argument should be in [mlp, unet], but given {network_type}")
 
