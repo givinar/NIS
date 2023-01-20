@@ -227,8 +227,7 @@ class TrainServer:
         if self.hybrid_sampling:
             pass
         else:
-            # if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
-            if True:
+            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
                 lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
                 # Checking the Gaussian distribution
                 #y = self.nis.function(torch.from_numpy(self.samples_tensor))
