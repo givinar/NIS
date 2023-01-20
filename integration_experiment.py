@@ -20,6 +20,7 @@ import functions
 from network import MLP, UNet
 from transform import CompositeTransform
 from utils import pyhocon_wrapper, utils
+from utils.utils import cos_weight_vectorized
 from visualize import visualize, FunctionVisualizer, VisualizePoint
 
 # Using by server
@@ -198,6 +199,7 @@ class TrainServer:
             # Skip the first frame. Also processing only first bounce
             if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
                 [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
+                s = samples.cpu().detach().clone().numpy()
                 self.samples_tensor = samples.clone().numpy()
                 samples[:, 0] = samples[:, 0] * 2 * np.pi
                 samples[:, 1] = torch.acos(samples[:, 1])
@@ -225,7 +227,8 @@ class TrainServer:
         if self.hybrid_sampling:
             pass
         else:
-            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            # if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            if True:
                 lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
                 # Checking the Gaussian distribution
                 #y = self.nis.function(torch.from_numpy(self.samples_tensor))

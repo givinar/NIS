@@ -326,4 +326,4 @@ def get_test_samples_vectorized(points: np.ndarray):
     norm = np.tile(np.array([0, 1, 0]), (points.shape[0], 1))
     [lights, pdfs] = cos_weight_vectorized(s, norm)
 
-    return [torch.from_numpy(lights).to('cpu'), torch.from_numpy(pdfs).to('cpu')]
+    return [torch.from_numpy(lights.astype(np.float32)).to('cpu'), torch.from_numpy(pdfs.astype(np.float32)).to('cpu')]

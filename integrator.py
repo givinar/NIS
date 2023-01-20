@@ -211,10 +211,6 @@ class Integrator():
         """
         if inverse:
             z = torch.tensor(context[:, 8:]).to(self.device)        # May be nan for some values. Check it on Hybrid side
-            is_nan = np.isnan(z).any(axis=1)
-            if True in is_nan:
-                print("Attention! NANANANANA")
-                return torch.ones(context.shape[0]) / (2 * np.pi)
             z[:, 0] = z[:, 0] / (2 * np.pi) #phi
             z[:, 1] = np.abs(np.cos(z[:, 1].cpu()))       #theta
             with torch.no_grad():

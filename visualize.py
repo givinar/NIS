@@ -324,7 +324,7 @@ class VisualizePoint():
         if self.iteration_infer % self.plot_step == 0:
             fig, ax = plt.subplots()
             ax.set_title("Point distribution NIS", fontsize=20)
-            ax.imshow(self.plot_array_infer, interpolation='bilinear')
+            ax.imshow(self.plot_array_infer.T, interpolation='bilinear', origin='lower')
             temporal_path = os.path.join(self.path, subdir)
             path_fig = os.path.join(temporal_path, "frame_%04d.png" % self.iteration_infer)
             fig.savefig(path_fig)
@@ -343,8 +343,8 @@ class VisualizePoint():
         if self.iteration_train % self.plot_step == 0:
             fig, ax = plt.subplots()
             ax.set_title("Point distribution Hybrid", fontsize=20)
-            ax.imshow(self.plot_array_train, interpolation='bilinear',
-                 extent=None)
+            ax.imshow(self.plot_array_train.T, interpolation='bilinear',
+                 extent=None, origin='lower')
             temporal_path = os.path.join(self.path, subdir)
             path_fig = os.path.join(temporal_path, "frame_%04d.png" % self.iteration_train)
             fig.savefig(path_fig)
@@ -368,7 +368,7 @@ class VisualizePoint():
         plot_array = plot_array / plot_array.max()
         fig, ax = plt.subplots()
         ax.set_title("Point distribution", fontsize=20)
-        ax.imshow(plot_array, interpolation='bilinear')
+        ax.imshow(plot_array.T, interpolation='bilinear', origin='lower')
         temporal_path = os.path.join(self.path, "invers")
         path_fig = os.path.join(temporal_path,"frame_%04d.png"%self.iteration_plot_pdf)
         fig.savefig(path_fig)
