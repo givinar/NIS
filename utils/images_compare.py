@@ -35,7 +35,7 @@ class Metrics:
 
     def ssim(self, preds: np.ndarray) -> float:
         preds_img = Image.fromarray(np.uint8(preds * 255.))
-        return compare_ssim(preds_img, self.gt_img, tile_size = 3)
+        return compare_ssim(preds_img, self.gt_img, tile_size = 1)
 
     def mape(self, preds: np.ndarray) -> float:
         return MeanAbsolutePercentageError()(torch.from_numpy(preds).to(torch.float),

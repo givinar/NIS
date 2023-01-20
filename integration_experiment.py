@@ -188,45 +188,35 @@ class TrainServer:
             self.nis.num_frame += 1
             print("Frame num: " + str(self.nis.num_frame))
         #points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 2)) #add vec2 light_sample_dir
-        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape(
-            (-1, 8 + 2))  # add vec2 light_sample_dir
+        points = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, 8 + 2))  # Temporal solution for ignoring processing additional inputs in NN
         if self.hybrid_sampling:
             pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
             [samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
             #pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
             #[samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
+            # Skip the first frame. Also processing only first bounce
             if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
-            #if self.nis.num_frame != 1:
-            #if self.nis.train_sampling_call_difference == 1:
                 [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
                 self.samples_tensor = samples.clone().numpy()
                 samples[:, 0] = samples[:, 0] * 2 * np.pi
                 samples[:, 1] = torch.acos(samples[:, 1])
-                #if self.nis.num_frame < 500:
+
+                # MIS should be implemented here
                 #pdfs = (1 / (2 * np.pi)) / pdfs
-                if self.nis.num_frame <= 500:
-                    c = self.nis.num_frame / 500
-                    pdfs = 1 / (2 * np.pi) * (1 - c) + c * pdfs
+                #pdf_light_samples = pdf_light_samples / (2 * np.pi)
+                #if self.nis.num_frame < 100:
+                #    pdfs = torch.ones(pdfs.size())
+                #    pdfs /= (2 * np.pi)
+                #    pdf_light_samples = torch.ones(pdfs.size())
+                #    pdf_light_samples /= (2 * np.pi)
             else:
                 #pdf_light_samples = utils.get_pdf_by_samples_cosine(points[:, 8:])
                 #[samples, pdfs] = utils.get_test_samples_cosine(points)  # lights(vec3), pdfs
                 pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
                 [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
-            #pdf_light_samples = pdf_light_samples / (2 * np.pi)
-            #samples[[int(samples.shape[0] * 0.5)-1, int(samples.shape[0] * 0.5), int(samples.shape[0] * 0.5)+1]] = samples_n
-            #pdfs[[int(pdfs.shape[0] * 0.5)-1, int(pdfs.shape[0] * 0.5), int(pdfs.shape[0] * 0.5)+1]] = pdfs_n
-            #pdf_light_samples[[int(pdf_light_samples.shape[0] * 0.5)-1, int(pdf_light_samples.shape[0] * 0.5), int(pdf_light_samples.shape[0] * 0.5)+1]] = pdf_light_samples_n
-            #if self.nis.train_sampling_call_difference == 1:
-            #[self.s1, self.s2] = samples[int(samples.shape[0] * 0.5)].numpy()
-            #pdf = pdfs[int(pdfs.shape[0] * 0.5)]
-            #self.pdf = pdfs[int(pdfs.shape[0] * 0.5)].numpy()
-            #self.visualize_point.add_sample_with_pdf_infer([self.s1, self.s2], 1, "infer")
-            #self.visualize_point.add_sample_with_pdf_infer([self.s1 / (2 * np.pi), np.cos(self.s2)], 1, "infer")
-            #self.visualize_point.plot_pdf(self.middle_point)
-            #self.visualize_point.add_point(samples.numpy())
 
-        return [samples, pdf_light_samples, pdfs]  # lights, pdfs
+        return [samples, pdf_light_samples, pdfs]
 
     def make_train(self):
         #context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3))
@@ -236,12 +226,8 @@ class TrainServer:
             pass
         else:
             if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
-            #if self.nis.num_frame != 1:
-            #if self.nis.train_sampling_call_difference == 1:
                 lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
-                #for l in lum:
-                #    if l > 100:
-                #        print("Lum: " + str(l))
+                # Checking the Gaussian distribution
                 #y = self.nis.function(torch.from_numpy(self.samples_tensor))
                 #lum[0] = y[0].item()
                 #lum[1] = y[1].item()
@@ -351,12 +337,12 @@ class NeuralImportanceSampling:
         dist = torch.distributions.uniform.Uniform(torch.tensor([0.0] * self.config.ndims),
                                                    torch.tensor([1.0] * self.config.ndims))
         optimizer = torch.optim.Adam(flow.parameters(), lr=self.config.lr)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.config.epochs)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.config.epochs) # For Adam we don't need the scheduler
         self.integrator = Integrator(func=self.function,
                                         flow=flow,
                                         dist=dist,
                                         optimizer=optimizer,
-                                        scheduler=scheduler,
+                                        scheduler=None,
                                         loss_func=self.config.loss_func)
 
         self.means =  []
@@ -486,7 +472,8 @@ class NeuralImportanceSampling:
             self.integrator.apply_optimizer()
 
         if self.train_sampling_call_difference == 1:
-            self.integrator.z_mapper = {}
+            self.integrator.z_mapper = {}                   #Be careful with z_mapper
+
         #print("Frame computed: ", time.time() - self.time)
         self.time = time.time()
         return train_results

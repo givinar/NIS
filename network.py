@@ -131,9 +131,9 @@ class UNet(nn.Module):
         temps = self.initial_layer(inputs)
         temps = self.nonlinearity(temps)
 
-        if temps.size(dim=0) > 1:
-            normalization = nn.BatchNorm1d(temps.size(dim=1))
-            temps = normalization(temps)
+        #if temps.size(dim=0) > 1:
+        #    normalization = nn.BatchNorm1d(temps.size(dim=1))
+        #    temps = normalization(temps)
 
         down_temps = []
         for layer in self.down_layers:
