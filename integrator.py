@@ -18,7 +18,8 @@ class Integrator():
         https://gitlab.com/i-flow/i-flow/, arXiv:2001.05486 (Tensorflow)
     """
     def __init__(self, func, flow, dist, optimizer, scheduler=None, loss_func=None,
-                 device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"), **kwargs):
+                 device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"), features_mode='all_features',
+                 **kwargs):
         """ Initialize the normalizing flow integrator. 
         Args:
             - func : function to be integrated
@@ -42,6 +43,7 @@ class Integrator():
             raise RuntimeError("Requested loss function not found in class methods")
         self.loss_func = getattr(self.divergence, loss_func)
         self.z_mapper = {}
+        self.features_mode = features_mode
 
     def train_one_step(self, nsamples, lr=None, points=False,integral=False):
         """ Perform one step of integration and improve the sampling.         
@@ -209,22 +211,25 @@ class Integrator():
             tf.tensor of size (context.shape[0], ndim) of sampled points, and jacobian(optional).
 
         """
+        self.flow.eval()
+        if self.features_mode == 'all_features':
+            flow_context = torch.tensor(context[:, :8]).to(self.device)
+        elif self.features_mode == 'xyz':
+            flow_context = torch.tensor(context[:, :3]).to(self.device)
+        else:
+            flow_context = None
         if inverse:
             z = torch.tensor(context[:, 8:]).to(self.device)        # May be nan for some values. Check it on Hybrid side
             z[:, 0] = z[:, 0] / (2 * np.pi) #phi
             z[:, 1] = np.abs(np.cos(z[:, 1].cpu()))       #theta
             with torch.no_grad():
-                #x, absdet = self.flow.inverse(z, context=torch.tensor(context[:, :8]).to(self.device))
-                #x, absdet = self.flow.inverse(z, context=torch.tensor(context[:, :3]).to(self.device))
-                x, absdet = self.flow.inverse(z, context=None)
+                x, absdet = self.flow.inverse(z, context=torch.tensor(flow_context).to(self.device))
             return 1/absdet.to('cpu')
         else:
             z = self.dist.sample((context.shape[0],)).to(self.device)
             list(map(lambda x: self.z_mapper.update({x[1].tobytes(): x[0]}), zip(z, context[:, [0,1,2]])))
             with torch.no_grad():
-                #x, absdet = self.flow(z, context=torch.tensor(context[:, :8]).to(self.device))
-                #x, absdet = self.flow(z, context=torch.tensor(context[:, :3]).to(self.device))
-                x, absdet = self.flow(z, context=None)
+                x, absdet = self.flow(z, context=flow_context)
             return (x.to('cpu'), absdet.to('cpu'))
 
     def train_with_context(self, z_context: np.ndarray, batch_size=100, lr=None, points=False, integral=False,
@@ -238,12 +243,15 @@ class Integrator():
         context = z_context[1]
 
         # Process #
-        #context_x = context[:, :3]     #only coords
-        context_x = context[:, :-1]
+        if self.features_mode == 'all_features':
+            context_x = torch.Tensor(context[:, :-1]).to(self.device)
+        elif self.features_mode == 'xyz':
+            context_x = torch.Tensor(context[:, :3]).to(self.device)
+        else:
+            context_x = None
         context_y = context[:, -1]
         train_result = []
         start = time.time()
-        context_x = torch.Tensor(context_x)
         logging.info(f'context_x time: {time.time() - start}')
         start = time.time()
 
@@ -254,8 +262,7 @@ class Integrator():
             logging.info(f'batch time: {time.time() - start}')
 
             start = time.time()
-            #x, absdet = self.flow(batch_z, batch_x.to(self.device))
-            x, absdet = self.flow(batch_z, None)
+            x, absdet = self.flow(batch_z, batch_x)
 
             absdet.requires_grad_(True)
             #y = self._func(x)
