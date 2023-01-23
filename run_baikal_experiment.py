@@ -9,7 +9,7 @@ from multiprocessing import Process
 import os
 
 from server_nis import server_processing
-from  ExperimentConfig import ExperimentConfig
+from  experiment_config import ExperimentConfig
 from sklearn.model_selection import ParameterGrid
 
 from utils import pyhocon_wrapper

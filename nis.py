@@ -8,7 +8,7 @@ import logging
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 from dataclasses import asdict
-from  ExperimentConfig import ExperimentConfig
+from  experiment_config import ExperimentConfig
 from visualize import visualize, FunctionVisualizer, VisualizePoint
 from integrator import Integrator
 from transform import CompositeTransform
@@ -44,13 +44,19 @@ class NeuralImportanceSampling:
         self.function: functions.Function = getattr(functions, self.config.funcname)(n=self.config.ndims)
         #masks = self.create_binary_mask(self.config.ndims)
         masks = [[1., 0.], [0., 1.], [1., 0.], [0., 1]]
+        if self.config.features_mode == 'all_features':
+            num_context_features = self.config.num_context_features
+        elif self.config.features_mode == 'xyz':
+            num_context_features = 3
+        else:
+            num_context_features = 0
         flow = CompositeTransform([self.create_base_transform(mask=mask,
                                                               coupling_name=self.config.coupling_name,
                                                               hidden_dim=self.config.hidden_dim,
                                                               n_hidden_layers=self.config.n_hidden_layers,
                                                               blob=self.config.blob,
                                                               piecewise_bins=self.config.piecewise_bins,
-                                                              num_context_features=self.config.num_context_features,
+                                                              num_context_features=num_context_features,
                                                               network_type=self.config.network_type)
                                    for mask in masks])
         dist = torch.distributions.uniform.Uniform(torch.tensor([0.0] * self.config.ndims),
@@ -58,11 +64,12 @@ class NeuralImportanceSampling:
         optimizer = torch.optim.Adam(flow.parameters(), lr=self.config.lr)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.config.epochs) # For Adam we don't need the scheduler
         self.integrator = Integrator(func=self.function,
-                                        flow=flow,
-                                        dist=dist,
-                                        optimizer=optimizer,
-                                        scheduler=None,
-                                        loss_func=self.config.loss_func)
+                                     flow=flow,
+                                     dist=dist,
+                                     optimizer=optimizer,
+                                     scheduler=None,
+                                     loss_func=self.config.loss_func,
+                                     features_mode=self.config.features_mode)
 
         self.means = []
         self.errors = []

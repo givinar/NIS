@@ -45,6 +45,8 @@ class ExperimentConfig:
     num_training_steps: int = 16
     num_samples_per_training_step: int = 10_000
     max_train_buffer_size: int = 2_000_000
+    features_mode: str = 'all_features'  # 'no_features' 'xyz' 'all_features'
+    one_bounce_mode: bool = True
 
     save_plots: blob = True
     plot_dimension: int = 2
@@ -74,6 +76,8 @@ class ExperimentConfig:
                                 num_training_steps=pyhocon_config.get_int('train.num_training_steps', 16),
                                 num_samples_per_training_step=pyhocon_config.get_int('train.num_samples_per_training_step', 10_000),
                                 max_train_buffer_size=pyhocon_config.get_int('train.max_train_buffer_size', 2_000_000),
+                                features_mode=pyhocon_config.get_string('train.features_mode', 'all_features'),
+                                one_bounce_mode=pyhocon_config.get_bool('train.one_bounce_mode', True),
 
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),

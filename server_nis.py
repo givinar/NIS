@@ -3,8 +3,8 @@ import sys
 import numpy as np
 import torch
 
-from ExperimentConfig import ExperimentConfig
-from NIS import NeuralImportanceSampling
+from experiment_config import ExperimentConfig
+from nis import NeuralImportanceSampling
 from utils import pyhocon_wrapper, utils
 from utils.utils import cos_weight_vectorized
 
@@ -90,10 +90,10 @@ class TrainServer:
             #pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
             #[samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
-            # Skip the first frame. Also processing only first bounce
-            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            if (self.nis.num_frame != 1) and (not self.config.one_bounce_mode or
+                                              (self.nis.train_sampling_call_difference == 1)):
                 [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
-                #self.samples_tensor = samples.clone().numpy() # This is only needed for the make_train step and pass it to the Gaussian function.
+                self.samples_tensor = samples.clone().numpy() # This is only needed for the make_train step and pass it to the Gaussian function.
                 samples[:, 0] = samples[:, 0] * 2 * np.pi
                 samples[:, 1] = torch.acos(samples[:, 1])
 
@@ -120,13 +120,14 @@ class TrainServer:
         if self.hybrid_sampling:
             pass
         else:
-            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            if (self.nis.num_frame != 1) and (not self.config.one_bounce_mode or
+                                              (self.nis.train_sampling_call_difference == 1)):
                 lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
                 # Checking the Gaussian distribution
-                #y = self.nis.function(torch.from_numpy(self.samples_tensor))
-                #lum[0] = y[0].item()
-                #lum[1] = y[1].item()
-                #lum[2] = y[2].item()
+                y = self.nis.function(torch.from_numpy(self.samples_tensor))
+                lum[0] = y[0].item()
+                lum[1] = y[1].item()
+                lum[2] = y[2].item()
                 tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
                 tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1, dtype=np.float32)
                 train_result = self.nis.train(context=tdata)
