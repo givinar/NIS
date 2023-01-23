@@ -1,6 +1,8 @@
 import abc
 import torch
 import math
+from PIL import Image
+import numpy as np
 
 alpha = 0.2
 p1 = 0.4
@@ -110,3 +112,32 @@ class Ring:
     def name(self):
         return "Ring"
 
+
+class ImageFunc:
+    def __init__(self, n, image_path='einstein.png'):
+        self.alpha = alpha
+        self.n = 2
+        self.image = np.asarray(Image.open(image_path).convert('L'))
+        self.shape = self.image.shape
+        assert n == 2
+
+    def __call__(self, x):
+        assert self.n == x.shape[1]
+        res = []
+        for point in x:
+            res.append(self.image[int(point[0]*(self.shape[0]-1)),
+                                  int(point[1]*(self.shape[1]-1))])
+
+        return torch.tensor(res)
+
+    @property
+    def integral(self):
+        pass
+
+    @property
+    def integral_error(self):
+        pass
+
+    @property
+    def name(self):
+        return "ImageFunc"
