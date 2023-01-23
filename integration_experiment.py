@@ -80,6 +80,8 @@ class ExperimentConfig:
     num_training_steps: int = 16
     num_samples_per_training_step: int = 10_000
     max_train_buffer_size: int = 2_000_000
+    features_mode: str = 'all_features'  # 'no_features' 'xyz' 'all_features'
+    one_bounce_mode: bool = True
 
     save_plots: blob = True
     plot_dimension: int = 2
@@ -109,6 +111,8 @@ class ExperimentConfig:
                                 num_training_steps=pyhocon_config.get_int('train.num_training_steps', 16),
                                 num_samples_per_training_step=pyhocon_config.get_int('train.num_samples_per_training_step', 10_000),
                                 max_train_buffer_size=pyhocon_config.get_int('train.max_train_buffer_size', 2_000_000),
+                                features_mode=pyhocon_config.get_string('train.features_mode', 'all_features'),
+                                one_bounce_mode=pyhocon_config.get_bool('train.one_bounce_mode', True),
 
                                 funcname=pyhocon_config.get_string('train.function'),
                                 coupling_name=pyhocon_config.get_string('train.coupling_name'),
@@ -196,8 +200,8 @@ class TrainServer:
             #pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
             #[samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
-            # Skip the first frame. Also processing only first bounce
-            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            if (self.nis.num_frame != 1) and (not self.config.one_bounce_mode or
+                                              (self.nis.train_sampling_call_difference == 1)):
                 [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
                 s = samples.cpu().detach().clone().numpy()
                 self.samples_tensor = samples.clone().numpy()
@@ -227,7 +231,8 @@ class TrainServer:
         if self.hybrid_sampling:
             pass
         else:
-            if (self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1):
+            if (self.nis.num_frame != 1) and (not self.config.one_bounce_mode or
+                                              (self.nis.train_sampling_call_difference == 1)):
                 lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
                 # Checking the Gaussian distribution
                 #y = self.nis.function(torch.from_numpy(self.samples_tensor))
@@ -327,13 +332,19 @@ class NeuralImportanceSampling:
         self.function: functions.Function = getattr(functions, self.config.funcname)(n=self.config.ndims)
         #masks = self.create_binary_mask(self.config.ndims)
         masks = [[1., 0.], [0., 1.], [1., 0.], [0., 1]]
+        if self.config.features_mode == 'all_features':
+            num_context_features = self.config.num_context_features
+        elif self.config.features_mode == 'xyz':
+            num_context_features = 3
+        else:
+            num_context_features = 0
         flow = CompositeTransform([self.create_base_transform(mask=mask,
                                                               coupling_name=self.config.coupling_name,
                                                               hidden_dim=self.config.hidden_dim,
                                                               n_hidden_layers=self.config.n_hidden_layers,
                                                               blob=self.config.blob,
                                                               piecewise_bins=self.config.piecewise_bins,
-                                                              num_context_features=self.config.num_context_features,
+                                                              num_context_features=num_context_features,
                                                               network_type=self.config.network_type)
                                    for mask in masks])
         dist = torch.distributions.uniform.Uniform(torch.tensor([0.0] * self.config.ndims),
@@ -345,7 +356,8 @@ class NeuralImportanceSampling:
                                         dist=dist,
                                         optimizer=optimizer,
                                         scheduler=None,
-                                        loss_func=self.config.loss_func)
+                                        loss_func=self.config.loss_func,
+                                        features_mode=self.config.features_mode)
 
         self.means =  []
         self.errors = []
