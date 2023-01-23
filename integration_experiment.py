@@ -200,8 +200,8 @@ class TrainServer:
             #pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
             #[samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
         else:
-            if not self.config.one_bounce_mode or \
-                    ((self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1)):
+            if (self.nis.num_frame != 1) and (not self.config.one_bounce_mode or
+                                              (self.nis.train_sampling_call_difference == 1)):
                 [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
                 s = samples.cpu().detach().clone().numpy()
                 self.samples_tensor = samples.clone().numpy()
@@ -231,8 +231,8 @@ class TrainServer:
         if self.hybrid_sampling:
             pass
         else:
-            if not self.config.one_bounce_mode or \
-                    ((self.nis.num_frame != 1) and (self.nis.train_sampling_call_difference == 1)):
+            if (self.nis.num_frame != 1) and (not self.config.one_bounce_mode or
+                                              (self.nis.train_sampling_call_difference == 1)):
                 lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
                 # Checking the Gaussian distribution
                 #y = self.nis.function(torch.from_numpy(self.samples_tensor))
