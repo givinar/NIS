@@ -8,7 +8,8 @@ import time
 from multiprocessing import Process
 import os
 
-from integration_experiment import ExperimentConfig, server_processing
+from server_nis import server_processing
+from  ExperimentConfig import ExperimentConfig
 from sklearn.model_selection import ParameterGrid
 
 from utils import pyhocon_wrapper
