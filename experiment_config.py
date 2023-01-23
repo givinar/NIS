@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Union
 from utils import pyhocon_wrapper
 
+
 @dataclass
 class ExperimentConfig:
     """
@@ -45,7 +46,7 @@ class ExperimentConfig:
     num_training_steps: int = 16
     num_samples_per_training_step: int = 10_000
     max_train_buffer_size: int = 2_000_000
-    features_mode: str = 'all_features'  # 'no_features' 'xyz' 'all_features'
+    features_mode: str = "all_features"  # 'no_features' 'xyz' 'all_features'
     one_bounce_mode: bool = True
 
     save_plots: blob = True
@@ -53,39 +54,52 @@ class ExperimentConfig:
     save_plt_interval: int = 10
     wandb_project: Union[str, None] = None
     use_tensorboard: bool = False
-    host: str = '127.0.0.1'
+    host: str = "127.0.0.1"
     port: int = 65432
 
     @classmethod
     def init_from_pyhocon(cls, pyhocon_config: pyhocon_wrapper.ConfigTree):
-        return ExperimentConfig(epochs=pyhocon_config.get_int('train.epochs'),
-                                batch_size=pyhocon_config.get_int('train.batch_size'),
-                                gradient_accumulation=pyhocon_config.get_bool('train.gradient_accumulation', True),
-                                lr=pyhocon_config.get_float('train.learning_rate'),
-                                hidden_dim=pyhocon_config.get_int('train.num_hidden_dims'),
-                                ndims=pyhocon_config.get_int('train.num_coupling_layers'),
-                                n_hidden_layers=pyhocon_config.get_int('train.num_hidden_layers'),
-                                network_type=pyhocon_config.get_string('train.network_type', 'MLP'),
-                                blob=pyhocon_config.get_int('train.num_blob_bins', 0),
-                                piecewise_bins=pyhocon_config.get_int('train.num_piecewise_bins', 10),
-                                loss_func=pyhocon_config.get_string('train.loss', 'MSE'),
-                                save_plt_interval=pyhocon_config.get_int('logging.save_plt_interval', 5),
-                                experiment_dir_name=pyhocon_config.get_string('logging.plot_dir_name',
-                                                                              cls.experiment_dir_name),
-                                hybrid_sampling=pyhocon_config.get_bool('train.hybrid_sampling', False),
-                                num_training_steps=pyhocon_config.get_int('train.num_training_steps', 16),
-                                num_samples_per_training_step=pyhocon_config.get_int('train.num_samples_per_training_step', 10_000),
-                                max_train_buffer_size=pyhocon_config.get_int('train.max_train_buffer_size', 2_000_000),
-                                features_mode=pyhocon_config.get_string('train.features_mode', 'all_features'),
-                                one_bounce_mode=pyhocon_config.get_bool('train.one_bounce_mode', True),
-
-                                funcname=pyhocon_config.get_string('train.function'),
-                                coupling_name=pyhocon_config.get_string('train.coupling_name'),
-                                num_context_features=pyhocon_config.get_int('train.num_context_features'),
-                                wandb_project=pyhocon_config.get_string('logging.tensorboard.wandb_project', None),
-                                use_tensorboard=pyhocon_config.get_bool('logging.tensorboard.use_tensorboard', False),
-                                save_plots=pyhocon_config.get_bool('logging.save_plots', False),
-                                plot_dimension=pyhocon_config.get_int('logging.plot_dimension', 2),
-                                host=pyhocon_config.get_string('server.host', '127.0.0.1'),
-                                port=pyhocon_config.get_int('server.port', 65432),
-                                )
+        return ExperimentConfig(
+            epochs=pyhocon_config.get_int("train.epochs"),
+            batch_size=pyhocon_config.get_int("train.batch_size"),
+            gradient_accumulation=pyhocon_config.get_bool(
+                "train.gradient_accumulation", True
+            ),
+            lr=pyhocon_config.get_float("train.learning_rate"),
+            hidden_dim=pyhocon_config.get_int("train.num_hidden_dims"),
+            ndims=pyhocon_config.get_int("train.num_coupling_layers"),
+            n_hidden_layers=pyhocon_config.get_int("train.num_hidden_layers"),
+            network_type=pyhocon_config.get_string("train.network_type", "MLP"),
+            blob=pyhocon_config.get_int("train.num_blob_bins", 0),
+            piecewise_bins=pyhocon_config.get_int("train.num_piecewise_bins", 10),
+            loss_func=pyhocon_config.get_string("train.loss", "MSE"),
+            save_plt_interval=pyhocon_config.get_int("logging.save_plt_interval", 5),
+            experiment_dir_name=pyhocon_config.get_string(
+                "logging.plot_dir_name", cls.experiment_dir_name
+            ),
+            hybrid_sampling=pyhocon_config.get_bool("train.hybrid_sampling", False),
+            num_training_steps=pyhocon_config.get_int("train.num_training_steps", 16),
+            num_samples_per_training_step=pyhocon_config.get_int(
+                "train.num_samples_per_training_step", 10_000
+            ),
+            max_train_buffer_size=pyhocon_config.get_int(
+                "train.max_train_buffer_size", 2_000_000
+            ),
+            features_mode=pyhocon_config.get_string(
+                "train.features_mode", "all_features"
+            ),
+            one_bounce_mode=pyhocon_config.get_bool("train.one_bounce_mode", True),
+            funcname=pyhocon_config.get_string("train.function"),
+            coupling_name=pyhocon_config.get_string("train.coupling_name"),
+            num_context_features=pyhocon_config.get_int("train.num_context_features"),
+            wandb_project=pyhocon_config.get_string(
+                "logging.tensorboard.wandb_project", None
+            ),
+            use_tensorboard=pyhocon_config.get_bool(
+                "logging.tensorboard.use_tensorboard", False
+            ),
+            save_plots=pyhocon_config.get_bool("logging.save_plots", False),
+            plot_dimension=pyhocon_config.get_int("logging.plot_dimension", 2),
+            host=pyhocon_config.get_string("server.host", "127.0.0.1"),
+            port=pyhocon_config.get_int("server.port", 65432),
+        )
