@@ -3,7 +3,7 @@ from multiprocessing import Process
 import numpy as np
 
 from client import Client
-from integration_experiment import TrainServer, ExperimentConfig
+from server_nis import TrainServer, ExperimentConfig
 
 np.random.seed(42)
 TEST_DATA = np.random.rand(1000, 1000).astype(np.float32)
