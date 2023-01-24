@@ -235,10 +235,10 @@ class TrainServer:
                                               (self.nis.train_sampling_call_difference == 1)):
                 lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
                 # Checking the Gaussian distribution
-                #y = self.nis.function(torch.from_numpy(self.samples_tensor))
-                #lum[0] = y[0].item()
-                #lum[1] = y[1].item()
-                #lum[2] = y[2].item()
+                y = self.nis.function(torch.from_numpy(self.samples_tensor))
+                lum[0] = y[0].item()
+                lum[1] = y[1].item()
+                lum[2] = y[2].item()
                 tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
                 tdata = np.concatenate((tdata, lum.reshape([len(lum), 1])), axis=1, dtype=np.float32)
                 train_result = self.nis.train(context=tdata)
@@ -591,9 +591,9 @@ class NeuralImportanceSampling:
 
             if self.config.ndims == 2:  # if 2D -> visualize distribution
                 if bins is None:
-                    bins, x_edges, y_edges = np.histogram2d(x[:, 0], x[:, 1], bins=20, range=[[0, 1], [0, 1]])
+                    bins, x_edges, y_edges = np.histogram2d(x[:, 0], x[:, 1], bins=225, range=[[0, 1], [0, 1]])
                 else:
-                    newbins, x_edges, y_edges = np.histogram2d(x[:, 0], x[:, 1], bins=20, range=[[0, 1], [0, 1]])
+                    newbins, x_edges, y_edges = np.histogram2d(x[:, 0], x[:, 1], bins=225, range=[[0, 1], [0, 1]])
                     bins += newbins.T
                 x_centers = (x_edges[:-1] + x_edges[1:]) / 2
                 y_centers = (y_edges[:-1] + y_edges[1:]) / 2
@@ -638,9 +638,9 @@ if __name__ == '__main__':
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
 
     logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
-    server_processing(experiment_config)
+    #server_processing(experiment_config)
 
-    #experiment_config.num_context_features = 0
-    #nis = NeuralImportanceSampling(experiment_config)
-    #nis.initialize()
-    #nis.run_experiment()
+    experiment_config.num_context_features = 0
+    nis = NeuralImportanceSampling(experiment_config)
+    nis.initialize()
+    nis.run_experiment()

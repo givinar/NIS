@@ -73,8 +73,14 @@ class Integrator():
         x, absdet = self.flow(z)
         #absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
         y = self._func(x)
+
+        cross = torch.nn.CrossEntropyLoss()
+        loss = cross(absdet, y)
+        mean = torch.mean(y / absdet)
+        var = torch.var(y / absdet)
+
         #y = y / y.max()
-        y = y + np.finfo(np.float32).eps
+        #y = y + np.finfo(np.float32).eps
 
         #mean = torch.mean((y/absdet) * (y/absdet))
         #var = torch.var(y * absdet)
@@ -92,11 +98,11 @@ class Integrator():
         #var = torch.var(y * absdet)
 
         # Test from Dinh
-        log_y = torch.log(y)
-        log_absdet = torch.log(absdet)
-        mean = torch.mean(-log_absdet - log_y)
-        var = torch.var(y * absdet)
-        loss = mean
+        #log_y = torch.log(y)
+        #log_absdet = torch.log(absdet)
+        #mean = torch.mean(-log_absdet - log_y)
+        #var = torch.var(y * absdet)
+        #loss = mean
 
         #Was implemented
         #mean = torch.mean(y/absdet)

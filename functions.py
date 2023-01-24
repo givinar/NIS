@@ -126,7 +126,7 @@ class ImageFunc:
         res = []
         for point in x:
             res.append(self.image[int(point[0]*(self.shape[0]-1)),
-                                  int(point[1]*(self.shape[1]-1))])
+                                  int(point[1]*(self.shape[1]-1))] / 255)
 
         return torch.tensor(res)
 
