@@ -92,7 +92,7 @@ class UNet(nn.Module):
         self.num_layers = num_layers
 
         self.initial_layer = nn.Linear(in_features, max_hidden_features)
-        torch.nn.init.kaiming_uniform(self.initial_layer.weight, nonlinearity='relu')
+        torch.nn.init.kaiming_uniform(self.initial_layer.weight)
 
         self.down_layers = nn.ModuleList([
             nn.Linear(
@@ -103,13 +103,13 @@ class UNet(nn.Module):
         ])
 
         for l in self.down_layers:
-            torch.nn.init.kaiming_uniform(l.weight, nonlinearity='relu')
+            torch.nn.init.kaiming_uniform(l.weight)
 
         self.middle_layer = nn.Linear(
             in_features=max_hidden_features // 2 ** num_layers,
             out_features=max_hidden_features // 2 ** num_layers)
 
-        torch.nn.init.kaiming_uniform(self.middle_layer.weight, nonlinearity='relu')
+        torch.nn.init.kaiming_uniform(self.middle_layer.weight)
 
         self.up_layers = nn.ModuleList([
             nn.Linear(

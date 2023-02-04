@@ -115,20 +115,19 @@ class Ring:
 
 class ImageFunc:
     def __init__(self, n, image_path='einstein.png'):
-        self.alpha = alpha
         self.n = 2
-        self.image = np.asarray(Image.open(image_path).convert('L'))
+        self.image = np.asarray(Image.open(image_path).convert('L').resize([100, 100]))
         self.shape = self.image.shape
         assert n == 2
 
     def __call__(self, x):
         assert self.n == x.shape[1]
-        res = []
-        for point in x:
-            res.append(self.image[int(point[0]*(self.shape[0]-1)),
-                                  int(point[1]*(self.shape[1]-1))])
-
-        return torch.tensor(res)
+        x = x.cpu().numpy()
+        x[:, 0] = x[:, 0]*(self.shape[0]-1)
+        x[:, 1] = x[:, 1]*(self.shape[1]-1)
+        x = x.astype(np.int)
+        res = self.image[x[:, 0], x[:, 1]]
+        return torch.tensor(res, dtype=torch.float32) / 255
 
     @property
     def integral(self):
