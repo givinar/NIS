@@ -344,7 +344,7 @@ class NeuralImportanceSampling:
 
     def run_experiment(self):
 
-        visObject = visualize(os.path.join(self.logs_dir, 'plots_0'))
+        visObject = visualize(os.path.join(self.logs_dir, 'plots'))
 
         if self.config.use_tensorboard:
             if self.config.wandb_project is not None:
