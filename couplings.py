@@ -70,7 +70,8 @@ class CouplingTransform(transform.Transform):
         return len(self.transform_features)
 
     def one_blob(self,xd):
-        binning = (0.5/self.nbins_in) + torch.arange(0., 1.,1./self.nbins_in).repeat(xd.numel())
+        device = xd.get_device() if xd.is_cuda else torch.device('cpu')
+        binning = (0.5/self.nbins_in) + torch.arange(0., 1.,1./self.nbins_in, device=device).repeat(xd.numel())
         binning = binning.reshape(-1,self.num_identity_features,self.nbins_in)
         x = xd.unsqueeze(-1)
         res = torch.exp(((-self.nbins_in*self.nbins_in)/2.) * (binning-x)**2)

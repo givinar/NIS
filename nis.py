@@ -1,3 +1,4 @@
+import argparse
 import os
 import time
 import functions
@@ -9,6 +10,7 @@ from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 from dataclasses import asdict
 from experiment_config import ExperimentConfig
+from utils import pyhocon_wrapper
 from visualize import visualize, FunctionVisualizer
 from integrator import Integrator
 from transform import CompositeTransform
@@ -339,3 +341,98 @@ class NeuralImportanceSampling:
         self.tb_writer.add_scalar(
             "Train/LR", train_result["lr"], self.integrator.global_step
         )
+
+    def run_experiment(self):
+
+        visObject = visualize(os.path.join(self.logs_dir, 'plots'))
+
+        if self.config.use_tensorboard:
+            if self.config.wandb_project is not None:
+                import wandb
+                wandb.tensorboard.patch(root_logdir=logs_dir)
+                wandb.init(project=config.wandb_project, config=asdict(config), sync_tensorboard=True,
+                           entity="neural_importance_sampling")
+            tb_writer = SummaryWriter(log_dir=logs_dir)
+            tb_writer.add_text("Config",
+                               '\n'.join([f"{k.rjust(20, ' ')}: {v}" for k, v in asdict(self.config).items()]))
+
+        if self.config.ndims == 2:  # if 2D -> prepare x1,x2 gird for visualize
+            grid_x1, grid_x2 = torch.meshgrid(torch.linspace(0, 1, 100), torch.linspace(0, 1, 100))
+            grid = torch.cat([grid_x1.reshape(-1, 1), grid_x2.reshape(-1, 1)], axis=1)
+            func_out = np.flip(self.function(grid).reshape(100, 100).numpy()).T
+
+        means = []
+        errors = []
+        for epoch in range(1, self.config.epochs + 1):
+            print("Epoch %d/%d [%0.2f%%]" % (epoch, self.config.epochs, epoch / self.config.epochs * 100))
+
+            # Integrate on one epoch and produce resuts #
+            result_dict = self.integrator.train_one_step(self.config.batch_size, lr=True, integral=True, points=True)
+            loss = result_dict['loss']
+            lr = result_dict['lr']
+            mean = result_dict['mean']
+            error = result_dict['uncertainty']
+            z = result_dict['z'].data.numpy()
+            x = result_dict['x'].data.numpy()
+
+            # Record values #
+            means.append(mean)
+            errors.append(error)
+
+            # Combine all mean and errors
+            mean_wgt = np.sum(means / np.power(errors, 2), axis=-1)
+            err_wgt = np.sum(1. / (np.power(errors, 2)), axis=-1)
+            mean_wgt /= err_wgt
+            err_wgt = 1 / np.sqrt(err_wgt)
+
+            print("\t" + (self.config.coupling_name + ' ').ljust(25, '.') + ("Loss = %0.8f" % loss).rjust(20, ' ') + (
+                    "\t(LR = %0.8f)" % lr).ljust(20, ' ') + (
+                          "Integral = %0.8f +/- %0.8f" % (mean_wgt, err_wgt)))
+
+            # dict_loss = {'$Loss^{%s}$' % self.config.coupling_name: [loss, 0]}
+            dict_val = {'$I^{%s}$' % self.config.coupling_name: [mean_wgt, 0]}
+            dict_error = {'$\sigma_{I}^{%s}$' % self.config.coupling_name: [err_wgt, 0]}
+
+            if self.config.use_tensorboard:
+                tb_writer.add_scalar('Train/Loss', loss, epoch)
+                tb_writer.add_scalar('Train/Integral', mean_wgt, epoch)
+                tb_writer.add_scalar('Train/LR', lr, epoch)
+
+            # Plot function output #
+            if epoch % self.config.save_plt_interval == 0:
+                visObject.AddCurves(x=epoch, x_err=0, title="Integral value", dict_val=dict_val)
+                visObject.AddCurves(x=epoch, x_err=0, title="Integral uncertainty", dict_val=dict_error)
+                visObject.AddPointSet(x, title="Observed $x$ %s" % self.config.coupling_name, color='b')
+                visObject.AddPointSet(z, title="Latent space $z$", color='b')
+                x = self.integrator.sample(100000, jacobian=False).data.numpy()
+                for _ in range(10):
+                    x = np.vstack((x, self.integrator.sample(100000, jacobian=False).data.numpy()))
+                bins, x_edges, y_edges = np.histogram2d(1 - x[:, 0], 1 - x[:, 1], bins=100, range=[[0, 1], [0, 1]],
+                                                        density=True)
+                x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+                y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                x_centers, y_centers = np.meshgrid(x_centers, y_centers)
+                visObject.AddContour(x_centers, y_centers, bins, "Cumulative %s" % self.config.coupling_name)
+                visObject.AddContour(grid_x1, grid_x2, func_out, "Target function : " + self.function.name)
+                visObject.MakePlot(epoch)
+
+
+def parse_args():
+    train_parser = argparse.ArgumentParser(description="Application for model training")
+
+    train_parser.add_argument(
+        "-c", "--config", required=True, help="Configuration file path"
+    )
+
+    return train_parser.parse_args()
+
+
+if __name__ == '__main__':
+    options = parse_args()
+    config = pyhocon_wrapper.parse_file(options.config)
+    experiment_config = ExperimentConfig.init_from_pyhocon(config)
+
+    experiment_config.num_context_features = 0
+    nis = NeuralImportanceSampling(experiment_config)
+    nis.initialize()
+    nis.run_experiment()
