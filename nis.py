@@ -75,6 +75,14 @@ class NeuralImportanceSampling:
                 for mask in masks
             ]
         )
+        coef_net = UNet(
+                in_features=6,
+                out_features=1,
+                max_hidden_features=self.config.hidden_dim,
+                num_layers=self.config.n_hidden_layers,
+                nonlinearity=nn.ReLU(),
+                output_activation=nn.Sigmoid(),
+            )
         dist = torch.distributions.uniform.Uniform(
             torch.tensor([0.0] * self.config.ndims),
             torch.tensor([1.0] * self.config.ndims),
@@ -88,6 +96,7 @@ class NeuralImportanceSampling:
             scheduler=None,
             loss_func=self.config.loss_func,
             features_mode=self.config.features_mode,
+            coef_net=coef_net,
         )
 
         self.means = []

@@ -19,6 +19,7 @@ class Integrator:
         self,
         func,
         flow,
+        coef_net,
         dist,
         optimizer,
         scheduler=None,
@@ -42,6 +43,7 @@ class Integrator:
         self.global_step = 0
         self.scheduler_step = 0
         self.flow = flow.to(device)
+        self.coef_net = coef_net
         self.dist: torch.distributions.Distribution = dist
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -252,7 +254,9 @@ class Integrator:
             )
             with torch.no_grad():
                 x, absdet = self.flow(z, context=flow_context)
+                coef = self.coef_net(context[0, 1, 2, 6, 7])  # xyz , w0
             return (x.to("cpu"), absdet.to("cpu"))
+            return (x.to("cpu"), absdet.to("cpu"), coef.to("cpu"))
 
     def train_with_context(
         self,
@@ -284,62 +288,73 @@ class Integrator:
         logging.info(f"context_x time: {time.time() - start}")
         start = time.time()
 
-        context_y = torch.Tensor(context_y)
+        context_y = torch.Tensor(context_y).to(self.device)
+        context_с = torch.Tensor(context[0, 1, 2, 6, 7]).to(self.device)
         logging.info(f"context_y time: {time.time() - start}")
         start = time.time()
-        for batch_x, batch_y, batch_z in [(context_x, context_y, z)]:
-            logging.info(f"batch time: {time.time() - start}")
+        logging.info(f"batch time: {time.time() - start}")
 
+        start = time.time()
+        x, absdet = self.flow(z, context_x)
+        coef = self.coef_net(context_с)  # xyz , w0
+        absdet.requires_grad_(True)
+        # y = self._func(x)
+        logging.info(f"flow time: {time.time() - start}")
+        # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
+
+        # --------------- START TODO compute loss ---------------
+        start = time.time()
+        y = context_y.to(self.device)
+
+        # cross = torch.nn.CrossEntropyLoss()
+        # loss = cross(absdet, y)
+        kl_loss = torch.nn.KLDivLoss()
+        loss = kl_loss(torch.log_softmax(absdet, -1), torch.softmax(y, -1))
+
+        # absdet_coef = coef * absdet + (1 - coef) * hybrid_pdf
+        # loss_coef = kl_loss(torch.log_softmax(absdet_coef, -1), torch.softmax(y, -1))
+        #
+        # tao = 0.5
+        # b_tao = 0.5*((1/3)**(5*tao))
+        # final_loss = b_tao*loss + (1-b_tao)*loss_coef
+        # final_loss.backward()
+
+        mean = torch.mean(y / absdet)
+        var = torch.var(y / absdet)
+
+        if var == 0:
+            var += np.finfo(np.float32).eps
+
+        # Backprop #
+        # loss = self.loss_func(y, absdet)
+        logging.info(f"loss time: {time.time() - start}")
+
+        start = time.time()
+        loss.backward()
+        logging.info(f"backward time: {time.time() - start}")
+        print("\t" "Loss = %0.8f" % loss)
+        # --------------- END TODO compute loss ---------------
+
+        if apply_optimizer:
             start = time.time()
-            x, absdet = self.flow(batch_z, batch_x)
 
-            absdet.requires_grad_(True)
-            # y = self._func(x)
-            logging.info(f"flow time: {time.time() - start}")
-            # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
+            self.apply_optimizer()
+            logging.info(f"optimizer time: {time.time() - start}")
 
-            # --------------- START TODO compute loss ---------------
-            start = time.time()
-            y = batch_y.to(self.device)
-
-            cross = torch.nn.CrossEntropyLoss()
-            loss = cross(absdet, y)
-            mean = torch.mean(y / absdet)
-            var = torch.var(y / absdet)
-
-            if var == 0:
-                var += np.finfo(np.float32).eps
-
-            # Backprop #
-            # loss = self.loss_func(y, absdet)
-            logging.info(f"loss time: {time.time() - start}")
-
-            start = time.time()
-            loss.backward()
-            logging.info(f"backward time: {time.time() - start}")
-            print("\t" "Loss = %0.8f" % loss)
-            # --------------- END TODO compute loss ---------------
-
-            if apply_optimizer:
-                start = time.time()
-
-                self.apply_optimizer()
-                logging.info(f"optimizer time: {time.time() - start}")
-
-            # Integral #
-            return_dict = {"loss": loss.to("cpu").item(), "epoch": self.global_step}
-            self.global_step += 1
-            if lr:
-                return_dict["lr"] = self.optimizer.param_groups[0]["lr"]
-            if integral:
-                return_dict["mean"] = mean.to("cpu").item()
-                return_dict["uncertainty"] = (
-                    torch.sqrt(var / (context.shape[0] - 1.0)).to("cpu").item()
-                )
-            if points:
-                return_dict["z"] = batch_z.to("cpu")
-                return_dict["x"] = x.to("cpu")
-            train_result.append(return_dict)
+        # Integral #
+        return_dict = {"loss": loss.to("cpu").item(), "epoch": self.global_step}
+        self.global_step += 1
+        if lr:
+            return_dict["lr"] = self.optimizer.param_groups[0]["lr"]
+        if integral:
+            return_dict["mean"] = mean.to("cpu").item()
+            return_dict["uncertainty"] = (
+                torch.sqrt(var / (context.shape[0] - 1.0)).to("cpu").item()
+            )
+        if points:
+            return_dict["z"] = z.to("cpu")
+            return_dict["x"] = x.to("cpu")
+        train_result.append(return_dict)
         return train_result
 
     def apply_optimizer(self):
