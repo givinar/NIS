@@ -1,3 +1,4 @@
+import shutil
 from experiment_config import ExperimentConfig
 from nis import NeuralImportanceSampling
 from pathlib import Path
@@ -5,7 +6,7 @@ from pathlib import Path
 TMP_TEST_PLOTS_DIR = Path('logs', 'tmp_test')
 OUTPUT_TEST_PLOTS_DIR = Path('test_outputs')
 if OUTPUT_TEST_PLOTS_DIR.exists():
-    OUTPUT_TEST_PLOTS_DIR.rmdir()
+    shutil.rmtree(OUTPUT_TEST_PLOTS_DIR)
 OUTPUT_TEST_PLOTS_DIR.mkdir(exist_ok=True)
 BASE_CONFIG = ExperimentConfig(ndims=2,
                                epochs=100,
