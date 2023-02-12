@@ -233,9 +233,9 @@ class NeuralImportanceSampling:
 
     def get_samples(self, context):
         # pdf_light_sample = self.integrator.sample_with_context(context, inverse=True)
-        [samples, pdf] = self.integrator.sample_with_context(context, inverse=False)
+        [samples, pdf, coef] = self.integrator.sample_with_context(context, inverse=False)
         pdf_light_sample = torch.ones(pdf.size())
-        return [samples, pdf_light_sample, pdf]
+        return [samples, pdf_light_sample, pdf, coef]
 
     def train(self, context):
         z = torch.stack(self.integrator.generate_z_by_context(context))

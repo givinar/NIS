@@ -31,8 +31,8 @@ class ExperimentConfig:
     ndims: int = 3
     funcname: str = "Gaussian"
     coupling_name: str = "piecewiseQuadratic"
-    num_context_features: int = 0
-    hidden_dim: int = 10
+    num_context_features: int = 8
+    hidden_dim: int = 256
     n_hidden_layers: int = 3
     network_type: str = "MLP"
     blob: Union[int, None] = None

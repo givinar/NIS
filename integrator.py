@@ -255,7 +255,6 @@ class Integrator:
             with torch.no_grad():
                 x, absdet = self.flow(z, context=flow_context)
                 coef = self.coef_net(context[0, 1, 2, 6, 7])  # xyz , w0
-            return (x.to("cpu"), absdet.to("cpu"))
             return (x.to("cpu"), absdet.to("cpu"), coef.to("cpu"))
 
     def train_with_context(

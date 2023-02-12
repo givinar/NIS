@@ -93,12 +93,13 @@ class TrainServer:
             )  # lights(vec3), pdfs
             # pdf_light_samples = utils.get_pdf_by_samples_uniform(points[:, 8:])
             # [samples, pdfs] = utils.get_test_samples_uniform(points)  # lights(vec3), pdfs
+            coef = torch.ones(pdf_light_samples.size())
         else:
             if (self.nis.num_frame != 1) and (
                 not self.config.one_bounce_mode
                 or (self.nis.train_sampling_call_difference == 1)
             ):
-                [samples, pdf_light_samples, pdfs] = self.nis.get_samples(points)
+                [samples, pdf_light_samples, pdfs, coef] = self.nis.get_samples(points)
                 self.samples_tensor = (
                     samples.clone().numpy()
                 )  # This is only needed for the make_train step and pass it to the Gaussian function.
@@ -120,12 +121,13 @@ class TrainServer:
                 [samples, pdfs] = utils.get_test_samples_uniform(
                     points
                 )  # lights(vec3), pdfs
+                coef = torch.ones(pdf_light_samples.size())
 
-        return [samples, pdf_light_samples, pdfs]
+        return [samples, pdf_light_samples, pdfs, coef]
 
     def make_train(self):
         # context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, self.config.num_context_features + 3))
-        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, 8 + 3))
+        context = np.frombuffer(self.raw_data, dtype=np.float32).reshape((-1, 8 + 3 + 1))
         context = context[~np.isnan(context).any(axis=1), :]
         if self.hybrid_sampling:
             pass
@@ -136,11 +138,11 @@ class TrainServer:
             ):
                 lum = 0.3 * context[:, 0] + 0.3 * context[:, 1] + 0.3 * context[:, 2]
                 # Checking the Gaussian distribution
-                y = self.nis.function(torch.from_numpy(self.samples_tensor))
-                lum[0] = y[0].item()
-                lum[1] = y[1].item()
-                lum[2] = y[2].item()
-                tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10]]
+                # y = self.nis.function(torch.from_numpy(self.samples_tensor))
+                # lum[0] = y[0].item()
+                # lum[1] = y[1].item()
+                # lum[2] = y[2].item()
+                tdata = context[:, [3, 4, 5, 6, 7, 8, 9, 10, 11]]
                 tdata = np.concatenate(
                     (tdata, lum.reshape([len(lum), 1])), axis=1, dtype=np.float32
                 )
@@ -161,7 +163,7 @@ class TrainServer:
                 self.make_train()
                 self.connection.send(self.data_ok.name)
             elif self.mode == Mode.INFERENCE:
-                [samples, pdf_light_samples, pdfs] = self.make_infer()
+                [samples, pdf_light_samples, pdfs, coef] = self.make_infer()
                 self.connection.send(self.put_infer.name)
                 answer = self.connection.recv(self.put_infer_ok.length)
                 if answer == self.put_infer_ok.name:
@@ -173,7 +175,9 @@ class TrainServer:
                         (s, pls.reshape([len(pls), 1])), axis=1, dtype=np.float32
                     )
                     p = pdfs.cpu().detach().numpy().reshape([-1, 1])
-                    raw_data.extend(np.concatenate((s, p), axis=1).tobytes())
+                    c = coef.cpu().detach().numpy().reshape([-1, 1])
+                    raw_data.extend(np.concatenate((s, p, c), axis=1).tobytes())
+
                     self.connection.send(len(raw_data).to_bytes(4, "little"))
                     self.connection.sendall(raw_data)
                     answer = self.connection.recv(self.data_ok.length)
