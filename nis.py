@@ -76,7 +76,7 @@ class NeuralImportanceSampling:
             ]
         )
         coef_net = UNet(
-                in_features=6,
+                in_features=5,
                 out_features=1,
                 max_hidden_features=self.config.hidden_dim,
                 num_layers=self.config.n_hidden_layers,

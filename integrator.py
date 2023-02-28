@@ -43,7 +43,7 @@ class Integrator:
         self.global_step = 0
         self.scheduler_step = 0
         self.flow = flow.to(device)
-        self.coef_net = coef_net
+        self.coef_net = coef_net.to(device)
         self.dist: torch.distributions.Distribution = dist
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -254,7 +254,7 @@ class Integrator:
             )
             with torch.no_grad():
                 x, absdet = self.flow(z, context=flow_context)
-                coef = self.coef_net(torch.tensor(context[:, [0, 1, 2, 6, 7]]), context=None)  # xyz , w0
+                coef = self.coef_net(torch.tensor(context[:, [0, 1, 2, 6, 7]]).to(self.device), context=None)  # xyz , w0
             return (x.to("cpu"), absdet.to("cpu"), coef.to("cpu"))
 
     def train_with_context(
@@ -276,7 +276,7 @@ class Integrator:
 
         # Process #
         if self.features_mode == "all_features":
-            context_x = torch.Tensor(context[:, :-1]).to(self.device)
+            context_x = torch.Tensor(context[:, :-2]).to(self.device)
         elif self.features_mode == "xyz":
             context_x = torch.Tensor(context[:, :3]).to(self.device)
         else:
@@ -288,14 +288,14 @@ class Integrator:
         start = time.time()
 
         context_y = torch.Tensor(context_y).to(self.device)
-        context_с = torch.Tensor(context[0, 1, 2, 6, 7]).to(self.device)
+        context_с = torch.Tensor(context[:, [0, 1, 2, 6, 7]]).to(self.device)
         logging.info(f"context_y time: {time.time() - start}")
         start = time.time()
         logging.info(f"batch time: {time.time() - start}")
 
         start = time.time()
         x, absdet = self.flow(z, context_x)
-        coef = self.coef_net(context_с)  # xyz , w0
+        coef = self.coef_net(context_с, context=None)  # xyz , w0
         absdet.requires_grad_(True)
         # y = self._func(x)
         logging.info(f"flow time: {time.time() - start}")
