@@ -48,6 +48,7 @@ class ExperimentConfig:
     max_train_buffer_size: int = 2_000_000
     features_mode: str = "all_features"  # 'no_features' 'xyz' 'all_features'
     one_bounce_mode: bool = True
+    drop_zero: bool = False
 
     save_plots: blob = True
     plot_dimension: int = 2
@@ -89,6 +90,7 @@ class ExperimentConfig:
                 "train.features_mode", "all_features"
             ),
             one_bounce_mode=pyhocon_config.get_bool("train.one_bounce_mode", True),
+            drop_zero=pyhocon_config.get_bool("train.drop_zero", False),
             funcname=pyhocon_config.get_string("train.function"),
             coupling_name=pyhocon_config.get_string("train.coupling_name"),
             num_context_features=pyhocon_config.get_int("train.num_context_features"),
