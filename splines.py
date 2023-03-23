@@ -77,16 +77,16 @@ def linear_spline(inputs, unnormalized_pdf,
 
         bin_width = 1.0 / num_bins
         logabsdet = torch.log(input_pdfs) - np.log(bin_width)
-
+        absdet_clayer = 1/(input_pdfs * num_bins)
     if inverse:
         outputs = outputs * (right - left) + left
         logabsdet = logabsdet - math.log(top - bottom) + math.log(right - left)
+        absdet_clayer = torch.exp(-logabsdet)
     else:
         outputs = outputs * (top - bottom) + bottom
         logabsdet = logabsdet + math.log(top - bottom) - math.log(right - left)
     #absdet = torch.exp(-logabsdet)
-    absdet = torch.exp(-logabsdet)
-    return outputs, absdet
+    return outputs, absdet_clayer
 
 def quadratic_spline(inputs,
                      unnormalized_widths,

@@ -149,6 +149,8 @@ class TrainServer:
                 tdata = np.concatenate(
                     (tdata, lum.reshape([len(lum), 1])), axis=1, dtype=np.float32
                 )
+                correct_indexes = tdata[:, -1] < 1000
+                tdata = tdata[correct_indexes]
                 self.nis.train(context=tdata)
             else:
                 pass

@@ -84,7 +84,20 @@ class Integrator:
         with torch.no_grad():
             y = self._func(x).to(self.device)
         kl_loss = torch.nn.KLDivLoss()
+        cross = torch.nn.CrossEntropyLoss()
+        # loss = cross(absdet, y)
         loss = kl_loss(torch.log_softmax(absdet, -1), torch.softmax(y, -1))
+        # loss = kl_loss(absdet, y)
+        # loss = (
+        #         (y/absdet) * (torch.log(y) - absdet)
+        # ).mean()
+        # loss = (
+        #         (y* torch.log(y)) - (y * absdet)
+        # ).mean()
+        # loss = (y * torch.log(y)).mean() - (y * absdet).mean()
+        # z = z.cpu()
+        # loss = torch.sum(y - absdet)
+        # loss = (y - absdet).mean(0)
         # y = y / y.max()
 
         mean = torch.mean((y/absdet) * (y/absdet))

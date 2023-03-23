@@ -5,6 +5,7 @@ import functions
 import torch
 import numpy as np
 import logging
+import matplotlib.pyplot as plt
 
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
@@ -55,7 +56,8 @@ class NeuralImportanceSampling:
             n=self.config.ndims
         )
         # masks = self.create_binary_mask(self.config.ndims)
-        masks = [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1]]
+        masks = [[1.0, 0.0]]
+        # masks = [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1]]
         if self.config.features_mode == "all_features":
             num_context_features = self.config.num_context_features - 3
         elif self.config.features_mode == "xyz":
@@ -83,13 +85,13 @@ class NeuralImportanceSampling:
                 max_hidden_features=self.config.hidden_dim,
                 num_layers=self.config.n_hidden_layers,
                 nonlinearity=nn.ReLU(),
-                output_activation=nn.Sigmoid(),
+            # output_activation=nn.Sigmoid(),
             )
         dist = torch.distributions.uniform.Uniform(
             torch.tensor([0.0] * self.config.ndims),
             torch.tensor([1.0] * self.config.ndims),
         )
-        optimizer = torch.optim.Adam(flow.parameters(), lr=self.config.lr)
+        optimizer = torch.optim.Adam(list(flow.parameters()) + list(coef_net.parameters()), lr=self.config.lr)
         self.integrator = Integrator(
             func=self.function,
             flow=flow,
@@ -242,20 +244,20 @@ class NeuralImportanceSampling:
     def train(self, context):
         if self.config.drop_zero:
             context = context[np.nonzero(context[:, -1])]
-        if context.size == 0:
-            return None
-        z = torch.stack(self.integrator.generate_z_by_context(context))
-        context = torch.tensor(context)
-        if self.z_buffer is None:
-            self.z_buffer = z
-        else:
-            self.z_buffer = torch.cat((self.z_buffer, z), 0)
-        # print("Z buffer length: " + str(len(self.z_buffer)))
+        if context.size != 0:
+            z = torch.stack(self.integrator.generate_z_by_context(context))
+            context = torch.tensor(context)
+            if self.z_buffer is None:
+                self.z_buffer = z
+            else:
+                self.z_buffer = torch.cat((self.z_buffer, z), 0)
+            # print("Z buffer length: " + str(len(self.z_buffer)))
+            if self.context_buffer is None:
+                self.context_buffer = context
+            else:
+                self.context_buffer = torch.cat((self.context_buffer, context), 0)
         if self.context_buffer is None:
-            self.context_buffer = context
-        else:
-            self.context_buffer = torch.cat((self.context_buffer, context), 0)
-
+            return
         # if self.train_sampling_call_difference == 1:
         if self.context_buffer.size()[0] > self.config.max_train_buffer_size:
             self.context_buffer = self.context_buffer[
@@ -391,7 +393,24 @@ class NeuralImportanceSampling:
             error = result_dict['uncertainty']
             z = result_dict['z'].data.numpy()
             x = result_dict['x'].data.numpy()
+            if epoch in [1, 10, 50, 100, 2000]:
+                num_bars = 30
+                hist_x = np.zeros(num_bars)
+                hist_y = np.zeros(num_bars)
+                for item in x:
+                    hist_x[int(item[0]*(num_bars-1))] += 1
+                    hist_y[int(item[1] * (num_bars-1))] += 1
+                fig = plt.figure()
+                ax = fig.add_axes([0, 0, 1, 1])
+                ax.bar(list(range(num_bars)), hist_x)
+                ax.set_title("bar_%04d_x" % epoch, fontsize=20)
+                fig.savefig(os.path.join(visObject.path, "bar_%04d_x.png" % epoch))
+                fig = plt.figure()
+                ax = fig.add_axes([0, 0, 1, 1])
+                ax.bar(list(range(num_bars)), hist_y)
+                ax.set_title("bar_%04d_y" % epoch, fontsize=20)
 
+                fig.savefig(os.path.join(visObject.path, "bar_%04d_y.png" % epoch))
             # Record values #
             means.append(mean)
             errors.append(error)
@@ -450,6 +469,7 @@ if __name__ == '__main__':
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
 
     experiment_config.num_context_features = 0
+    experiment_config.features_mode = 'no_features'
     nis = NeuralImportanceSampling(experiment_config)
     nis.initialize()
     nis.run_experiment()
