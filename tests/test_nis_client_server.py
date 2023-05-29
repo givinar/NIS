@@ -19,7 +19,7 @@ def test_nis_client_server():
 
 
 def server_process_func():
-    server = TrainServer(ExperimentConfig(num_context_features=6, save_plots=False))
+    server = TrainServer(ExperimentConfig(num_context_features=8, save_plots=False))
     server.nis.initialize(mode='server')
     server.connect()
 
@@ -32,6 +32,8 @@ def server_process_func():
     server.process()
 
     # inference nis
+    server.nis.num_frame = 2
+    server.nis.train_sampling_call_difference = 0
     server.hybrid_sampling = False
     server.mode = Mode.INFERENCE
     server.connection.send(server.put_infer_ok.name)

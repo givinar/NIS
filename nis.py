@@ -31,6 +31,8 @@ class NeuralImportanceSampling:
         mode: ['server', 'experiment'] - if mode==server, don't use dimension reduction and function in visualization
         """
         self.config = _config
+        if self.config.gradient_accumulation:
+            self.config.num_training_steps = 1
         self.logs_dir = os.path.join("logs", self.config.experiment_dir_name)
         self.integrator = None
         self.visualize_object = None
@@ -55,7 +57,7 @@ class NeuralImportanceSampling:
         # masks = self.create_binary_mask(self.config.ndims)
         masks = [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1]]
         if self.config.features_mode == "all_features":
-            num_context_features = self.config.num_context_features
+            num_context_features = self.config.num_context_features - 3
         elif self.config.features_mode == "xyz":
             num_context_features = 3
         else:
@@ -75,6 +77,14 @@ class NeuralImportanceSampling:
                 for mask in masks
             ]
         )
+        coef_net = UNet(
+                in_features=5,
+                out_features=1,
+                max_hidden_features=self.config.hidden_dim,
+                num_layers=self.config.n_hidden_layers,
+                nonlinearity=nn.ReLU(),
+                output_activation=nn.Sigmoid(),
+            )
         dist = torch.distributions.uniform.Uniform(
             torch.tensor([0.0] * self.config.ndims),
             torch.tensor([1.0] * self.config.ndims),
@@ -88,6 +98,7 @@ class NeuralImportanceSampling:
             scheduler=None,
             loss_func=self.config.loss_func,
             features_mode=self.config.features_mode,
+            coef_net=coef_net,
         )
 
         self.means = []
@@ -223,12 +234,16 @@ class NeuralImportanceSampling:
         return masks
 
     def get_samples(self, context):
-        # pdf_light_sample = self.integrator.sample_with_context(context, inverse=True)
-        [samples, pdf] = self.integrator.sample_with_context(context, inverse=False)
-        pdf_light_sample = torch.ones(pdf.size())
-        return [samples, pdf_light_sample, pdf]
+        pdf_light_sample = self.integrator.sample_with_context(context, inverse=True)
+        [samples, pdf, coef] = self.integrator.sample_with_context(context, inverse=False)
+        # pdf_light_sample = torch.ones(pdf.size())
+        return [samples, pdf_light_sample, pdf, coef]
 
     def train(self, context):
+        if self.config.drop_zero:
+            context = context[np.nonzero(context[:, -1])]
+        if context.size == 0:
+            return None
         z = torch.stack(self.integrator.generate_z_by_context(context))
         context = torch.tensor(context)
         if self.z_buffer is None:
@@ -247,6 +262,8 @@ class NeuralImportanceSampling:
                 -self.config.max_train_buffer_size:
             ]
             self.z_buffer = self.z_buffer[-self.config.max_train_buffer_size:]
+        if self.config.gradient_accumulation and self.train_sampling_call_difference != 1:
+            return
         for epoch in range(self.config.num_training_steps):
             start = time.time()
             indices = torch.randperm(len(self.context_buffer))[
@@ -261,7 +278,6 @@ class NeuralImportanceSampling:
                 integral=True,
                 points=True,
                 batch_size=self.config.batch_size,
-                apply_optimizer=not self.config.gradient_accumulation,
             )
 
             logging.info(f"Epoch time: {time.time() - start}")
@@ -275,7 +291,8 @@ class NeuralImportanceSampling:
                         self.log_tensorboard_train_step(epoch_result)
 
         if self.config.gradient_accumulation:
-            self.integrator.apply_optimizer()
+            self.z_buffer = None
+            self.context_buffer = None
 
         if self.train_sampling_call_difference == 1:
             self.integrator.z_mapper = {}  # Be careful with z_mapper

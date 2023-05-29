@@ -88,18 +88,20 @@ class Client:
         lum = np.stack((y,) * 3, axis=-1)
         scale = np.array([3, 3, 3])
         lum = lum / scale
+        pdf_brdf = np.random.random((self.num_points, 1)).astype(
+            np.float32)
         self.points_data = np.concatenate(
-            (self.points_data, lum.reshape([len(lum), 3])), axis=1, dtype=np.float32
+            (self.points_data, lum.reshape([len(lum), 3]), torch.from_numpy(pdf_brdf)), axis=1, dtype=np.float32
         )
         self.client_socket.send(
             len(
-                self.points_data[:, [14, 15, 16, 0, 1, 2, 3, 4, 5, 6, 7]].tobytes()
+                self.points_data[:, [14, 15, 16, 0, 1, 2, 3, 4, 5, 6, 7, 17]].tobytes()
             ).to_bytes(4, "little")
         )  # bytes
 
         raw_data = bytearray()
         raw_data.extend(
-            self.points_data[:, [14, 15, 16, 0, 1, 2, 3, 4, 5, 6, 7]].tobytes()
+            self.points_data[:, [14, 15, 16, 0, 1, 2, 3, 4, 5, 6, 7, 17]].tobytes()
         )  # send r,g,b x, y, z, norm_x, norm_y, norm_z, dir_x, dir_y, dir_z
         self.client_socket.send(raw_data)
 
