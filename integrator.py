@@ -77,12 +77,18 @@ class Integrator:
         # But in the future we might change sampling dist so good to have
 
         # Process #
-        x, absdet = self.flow(z)
+        x, absdet = self.flow(z) # this absdet is liklehood estimation for projection
         # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
         with torch.no_grad():
-            y = self._func(x).to(self.device)
-        kl_loss = torch.nn.KLDivLoss()
-        loss = kl_loss(torch.log_softmax(absdet, -1), torch.softmax(y, -1))
+            y = self._func(x).to(self.device) # in fact it is GT
+        kl_loss = torch.nn.KLDivLoss(reduction='batchmean')
+        mse_loss = torch.nn.CrossEntropyLoss()
+        # loss = kl_loss(torch.log_softmax(absdet, -1), torch.softmax(y, -1))
+
+        loss = kl_loss(torch.log(y+1e-6), absdet)
+
+        # loss = kl_loss(torch.log(y), absdet) # works
+
         # y = y / y.max()
 
         mean = torch.mean((y/absdet) * (y/absdet))

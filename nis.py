@@ -428,6 +428,14 @@ def parse_args():
 
 
 if __name__ == '__main__':
+    import torch
+    import random
+    import numpy as np
+
+    torch.manual_seed(42)
+    random.seed(42)
+    np.random.seed(42)
+
     options = parse_args()
     config = pyhocon_wrapper.parse_file(options.config)
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
