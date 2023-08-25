@@ -118,7 +118,7 @@ class visualize:
         if len(self.cont_dict.keys()) != 0:
             for title, data in self.cont_dict.items():
                 axs[idx_vert, idx_cont].set_title(title, fontsize=20)
-                cs = axs[idx_vert, idx_cont].contourf(data[0], data[1], data[2], 20)
+                cs = axs[idx_vert, idx_cont].contourf(data[0], data[1], data[2], 20, vmin=0, vmax=1)
                 # fig.colorbar(cs, ax=axs[idx_vert,idx_cont])
                 idx_cont += 1
             idx_vert += 1

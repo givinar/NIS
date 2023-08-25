@@ -412,7 +412,7 @@ class NeuralImportanceSampling:
                 x_centers = (x_edges[:-1] + x_edges[1:]) / 2
                 y_centers = (y_edges[:-1] + y_edges[1:]) / 2
                 x_centers, y_centers = np.meshgrid(x_centers, y_centers)
-                visObject.AddContour(x_centers, y_centers, bins, "Cumulative %s" % self.config.coupling_name)
+                visObject.AddContour(x_centers, y_centers, bins/bins.max(), "Cumulative %s" % self.config.coupling_name)
                 visObject.AddContour(grid_x1, grid_x2, func_out, "Target function : " + self.function.name)
                 visObject.MakePlot(epoch)
 
