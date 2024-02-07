@@ -22,6 +22,7 @@ from couplings import (
     AdditiveCouplingTransform,
     AffineCouplingTransform,
 )
+from nasg import NASG
 
 
 class NeuralImportanceSampling:
@@ -64,7 +65,7 @@ class NeuralImportanceSampling:
             [
                 self.create_base_transform(
                     mask=mask,
-                    coupling_name=self.config.coupling_name,
+                    transform_name=self.config.transform_name,
                     hidden_dim=self.config.hidden_dim,
                     n_hidden_layers=self.config.n_hidden_layers,
                     blob=self.config.blob,
@@ -127,13 +128,14 @@ class NeuralImportanceSampling:
     def create_base_transform(
         self,
         mask,
-        coupling_name,
+        transform_name,
         hidden_dim,
         n_hidden_layers,
         blob,
         piecewise_bins,
         num_context_features=0,
         network_type="MLP",
+        num_mixtures=0
     ):
         if network_type.lower() == "mlp":
             def transform_net_create_fn(in_features, out_features): return MLP(
@@ -157,21 +159,21 @@ class NeuralImportanceSampling:
                 f"network_type argument should be in [mlp, unet], but given {network_type}"
             )
 
-        if coupling_name == "additive":
+        if transform_name == "additive":
             return AdditiveCouplingTransform(
                 mask,
                 transform_net_create_fn,
                 blob,
                 num_context_features=num_context_features,
             )
-        elif coupling_name == "affine":
+        elif transform_name == "affine":
             return AffineCouplingTransform(
                 mask,
                 transform_net_create_fn,
                 blob,
                 num_context_features=num_context_features,
             )
-        elif coupling_name == "piecewiseLinear":
+        elif transform_name == "piecewiseLinear":
             return PiecewiseLinearCouplingTransform(
                 mask,
                 transform_net_create_fn,
@@ -179,7 +181,7 @@ class NeuralImportanceSampling:
                 piecewise_bins,
                 num_context_features=num_context_features,
             )
-        elif coupling_name == "piecewiseQuadratic":
+        elif transform_name == "piecewiseQuadratic":
             return PiecewiseQuadraticCouplingTransform(
                 mask,
                 transform_net_create_fn,
@@ -187,7 +189,7 @@ class NeuralImportanceSampling:
                 piecewise_bins,
                 num_context_features=num_context_features,
             )
-        elif coupling_name == "piecewiseCubic":
+        elif transform_name == "piecewiseCubic":
             return PiecewiseCubicCouplingTransform(
                 mask,
                 transform_net_create_fn,
@@ -195,8 +197,15 @@ class NeuralImportanceSampling:
                 piecewise_bins,
                 num_context_features=num_context_features,
             )
+        elif transform_name == 'nasg':
+            return NASG(
+                num_mixtures=num_mixtures,
+                transform_net_create_fn=transform_net_create_fn,
+                blob=blob,
+                num_context_features=num_context_features,
+            )
         else:
-            raise RuntimeError("Could not find coupling with name %s" % coupling_name)
+            raise RuntimeError("Could not find coupling with name %s" % transform_name)
 
     def create_binary_mask(self, ndims):
         """Create binary masks for to account for symmetries.
@@ -293,8 +302,8 @@ class NeuralImportanceSampling:
         mean_wgt /= err_wgt
         err_wgt = 1 / np.sqrt(err_wgt)
 
-        # dict_val = {"$I^{%s}$" % self.config.coupling_name: [mean_wgt, 0]}
-        # dict_error = {"$\sigma_{I}^{%s}$" % self.config.coupling_name: [err_wgt, 0]}
+        # dict_val = {"$I^{%s}$" % self.config.transform_name: [mean_wgt, 0]}
+        # dict_error = {"$\sigma_{I}^{%s}$" % self.config.transform_name: [err_wgt, 0]}
         # dict_loss = {"$I^{I}^{%s}$": [err_wgt, 0]}
         # self.visualize_object.AddCurves(x=train_result['epoch'], x_err=0, title="Integral value",
         #                                dict_val=dict_val)
@@ -307,11 +316,11 @@ class NeuralImportanceSampling:
         ):  # if 2D -> visualize distribution
             visualize_x = self.function_visualizer.add_trained_function_plot(
                 x=train_result["x"].detach().numpy(),
-                plot_name="Cumulative %s" % self.config.coupling_name,
+                plot_name="Cumulative %s" % self.config.transform_name,
             )
             self.visualize_object.AddPointSet(
                 visualize_x,
-                title="Observed $x$ %s" % self.config.coupling_name,
+                title="Observed $x$ %s" % self.config.transform_name,
                 color="b",
             )
             # self.visualize_object.AddPointSet(train_result['z'], title="Latent space $z$", color='b')
@@ -385,13 +394,13 @@ class NeuralImportanceSampling:
             mean_wgt /= err_wgt
             err_wgt = 1 / np.sqrt(err_wgt)
 
-            print("\t" + (self.config.coupling_name + ' ').ljust(25, '.') + ("Loss = %0.8f" % loss).rjust(20, ' ') + (
+            print("\t" + (self.config.transform_name + ' ').ljust(25, '.') + ("Loss = %0.8f" % loss).rjust(20, ' ') + (
                     "\t(LR = %0.8f)" % lr).ljust(20, ' ') + (
                           "Integral = %0.8f +/- %0.8f" % (mean_wgt, err_wgt)))
 
-            # dict_loss = {'$Loss^{%s}$' % self.config.coupling_name: [loss, 0]}
-            dict_val = {'$I^{%s}$' % self.config.coupling_name: [mean_wgt, 0]}
-            dict_error = {'$\sigma_{I}^{%s}$' % self.config.coupling_name: [err_wgt, 0]}
+            # dict_loss = {'$Loss^{%s}$' % self.config.transform_name: [loss, 0]}
+            dict_val = {'$I^{%s}$' % self.config.transform_name: [mean_wgt, 0]}
+            dict_error = {'$\sigma_{I}^{%s}$' % self.config.transform_name: [err_wgt, 0]}
 
             if self.config.use_tensorboard:
                 tb_writer.add_scalar('Train/Loss', loss, epoch)
@@ -402,7 +411,7 @@ class NeuralImportanceSampling:
             if epoch % self.config.save_plt_interval == 0:
                 visObject.AddCurves(x=epoch, x_err=0, title="Integral value", dict_val=dict_val)
                 visObject.AddCurves(x=epoch, x_err=0, title="Integral uncertainty", dict_val=dict_error)
-                visObject.AddPointSet(x, title="Observed $x$ %s" % self.config.coupling_name, color='b')
+                visObject.AddPointSet(x, title="Observed $x$ %s" % self.config.transform_name, color='b')
                 visObject.AddPointSet(z, title="Latent space $z$", color='b')
                 x = self.integrator.sample(100000, jacobian=False).data.numpy()
                 for _ in range(10):
@@ -412,7 +421,7 @@ class NeuralImportanceSampling:
                 x_centers = (x_edges[:-1] + x_edges[1:]) / 2
                 y_centers = (y_edges[:-1] + y_edges[1:]) / 2
                 x_centers, y_centers = np.meshgrid(x_centers, y_centers)
-                visObject.AddContour(x_centers, y_centers, bins, "Cumulative %s" % self.config.coupling_name)
+                visObject.AddContour(x_centers, y_centers, bins, "Cumulative %s" % self.config.transform_name)
                 visObject.AddContour(grid_x1, grid_x2, func_out, "Target function : " + self.function.name)
                 visObject.MakePlot(epoch)
 

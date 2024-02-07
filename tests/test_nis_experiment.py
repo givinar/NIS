@@ -33,7 +33,7 @@ def test_experiment_configs():
             for function in TEST_FUNCTIONS:
                 for net in TEST_NETS:
                     BASE_CONFIG.blob = num_blob_bins
-                    BASE_CONFIG.coupling_name = layer_type
+                    BASE_CONFIG.transform_name = layer_type
                     BASE_CONFIG.funcname = function
                     BASE_CONFIG.network_type = net
 

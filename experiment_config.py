@@ -10,7 +10,7 @@ class ExperimentConfig:
     experiment_dir_name: dir in logs folder
     ndims: Integration dimension
     funcname: Name of the function in functions.py to use for integration
-    coupling_name: name of the Coupling Layers using in NIS [piecewiseLinear, piecewiseQuadratic, piecewiseCubic]
+    transform_name: name of the Coupling Layers using in NIS [piecewiseLinear, piecewiseQuadratic, piecewiseCubic]
     num_context_features: : number of context features in transform net
     hidden_dim: Number of neurons per layer in the coupling layers
     n_hidden_layers: Number of hidden layers in coupling layers
@@ -30,7 +30,7 @@ class ExperimentConfig:
     experiment_dir_name: str = f"test_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     ndims: int = 3
     funcname: str = "Gaussian"
-    coupling_name: str = "piecewiseQuadratic"
+    transform_name: str = "piecewiseQuadratic"
     num_context_features: int = 0
     hidden_dim: int = 10
     n_hidden_layers: int = 3
@@ -48,6 +48,8 @@ class ExperimentConfig:
     max_train_buffer_size: int = 2_000_000
     features_mode: str = "all_features"  # 'no_features' 'xyz' 'all_features'
     one_bounce_mode: bool = True
+
+    num_mixtures: int = 0
 
     save_plots: blob = True
     plot_dimension: int = 2
@@ -89,8 +91,11 @@ class ExperimentConfig:
                 "train.features_mode", "all_features"
             ),
             one_bounce_mode=pyhocon_config.get_bool("train.one_bounce_mode", True),
+
+            num_mixtures=pyhocon_config.get_int("train.num_mixtures", 0),
+
             funcname=pyhocon_config.get_string("train.function"),
-            coupling_name=pyhocon_config.get_string("train.coupling_name"),
+            transform_name=pyhocon_config.get_string("train.transform_name"),
             num_context_features=pyhocon_config.get_int("train.num_context_features"),
             wandb_project=pyhocon_config.get_string(
                 "logging.tensorboard.wandb_project", None
