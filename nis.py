@@ -61,6 +61,8 @@ class NeuralImportanceSampling:
             num_context_features = 3
         else:
             num_context_features = 0
+        if self.config.transform_name == 'nasg':
+            masks = [None]  # 1 layer of composite transform
         flow = CompositeTransform(
             [
                 self.create_base_transform(
