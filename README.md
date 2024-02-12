@@ -51,6 +51,7 @@ train
   num_blob_bins = 0
   loss = MSE
   transform_name="nasg",
+  num_mixtures = 3
 }
 logging
 {

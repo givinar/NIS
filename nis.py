@@ -74,9 +74,11 @@ class NeuralImportanceSampling:
                     piecewise_bins=self.config.piecewise_bins,
                     num_context_features=num_context_features,
                     network_type=self.config.network_type,
+                    num_mixtures=self.config.num_mixtures
                 )
                 for mask in masks
-            ]
+            ],
+            num_context_features=num_context_features
         )
         dist = torch.distributions.uniform.Uniform(
             torch.tensor([0.0] * self.config.ndims),
@@ -443,7 +445,7 @@ if __name__ == '__main__':
     config = pyhocon_wrapper.parse_file(options.config)
     experiment_config = ExperimentConfig.init_from_pyhocon(config)
 
-    experiment_config.num_context_features = 0
+    # experiment_config.num_context_features = 0
     nis = NeuralImportanceSampling(experiment_config)
     nis.initialize()
     nis.run_experiment()

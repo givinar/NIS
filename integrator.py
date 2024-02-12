@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import warnings
 from divergences import Divergence
+from transform import CompositeTransform
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -41,7 +42,7 @@ class Integrator:
         self._func = func
         self.global_step = 0
         self.scheduler_step = 0
-        self.flow = flow.to(device)
+        self.flow: CompositeTransform = flow.to(device)
         self.dist: torch.distributions.Distribution = dist
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -77,7 +78,10 @@ class Integrator:
         # But in the future we might change sampling dist so good to have
 
         # Process #
-        x, absdet = self.flow(z)
+        np.random.seed(42)
+        feature = np.random.rand(nsamples, self.flow.num_context_features, )
+        feature = torch.tensor(feature, dtype=torch.float32, device=torch.device('cuda'))
+        x, absdet = self.flow(z, context=feature)
         # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
         with torch.no_grad():
             y = self._func(x).to(self.device)

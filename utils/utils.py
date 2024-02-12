@@ -327,3 +327,7 @@ def get_test_samples_vectorized(points: np.ndarray):
     [lights, pdfs] = cos_weight_vectorized(s, norm)
 
     return [torch.from_numpy(lights.astype(np.float32)).to('cpu'), torch.from_numpy(pdfs.astype(np.float32)).to('cpu')]
+
+
+def taylor_softmax(x: torch.Tensor) -> torch.Tensor:
+    return (1 + x + 0.5 * torch.pow(x, 2)) / (1 + x + 0.5 * torch.pow(x, 2)).sum()

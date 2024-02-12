@@ -21,13 +21,14 @@ class Transform(nn.Module):
 class CompositeTransform(Transform):
     """Composes several transforms into one, in the order they are given."""
 
-    def __init__(self, transforms):
+    def __init__(self, transforms, num_context_features=0):
         """Constructor.
         Args:
             transforms: an iterable of `Transform` objects.
         """
         super().__init__()
         self._transforms = nn.ModuleList(transforms)
+        self.num_context_features = num_context_features
 
     @staticmethod
     def _cascade(inputs, funcs, context):
