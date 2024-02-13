@@ -105,7 +105,15 @@ class NASG(transform.Transform):
         inputs : uniform x,y for NASG sampling
         nasg_params(batchsize, NUM_NASG_PARAMETERS * num_mixtures) : NASG parameter at the context
         """
-        cos_t, sin_f, cos_f, sin_p, cos_p, l, a, A = self._extract_nasg_parameters(nasg_params)
+        nasg_params = self._extract_nasg_parameters(nasg_params)
+
+        # need sin_t, may be from uniform input?
+        z = self._compute_z(sin_t=nasg_params.sin_f, cos_f=nasg_params.cos_f,  # TODO change sin_t
+                            sin_f=nasg_params.sin_f, cos_t=nasg_params.cos_t)
+        x = self._compute_x(cos_t=nasg_params.cos_t, cos_f=nasg_params.cos_f, cos_p=nasg_params.cos_p,
+                            sin_f=nasg_params.sin_f, sin_p=nasg_params.sin_p, sin_t=nasg_params.sin_f) # TODO change sin_t
+
+        # D = self._compute_D(nasg_params.A, nasg_params.a, nasg_params.l)  # example of computing D
         raise NotImplementedError()
 
     def _nasg_transform_inverse(self, inputs, nasg_params):
@@ -128,5 +136,31 @@ class NASG(transform.Transform):
         l_a_params = torch.exp(x[..., [5, 6]])
         l, a = torch.split(l_a_params, 1, dim=2)
         A = taylor_softmax(x[..., 7])
-        return NasgParams(cos_t, sin_f, cos_f, sin_p, cos_p, l, a, A)
+        return NasgParams(cos_t.squeeze(), sin_f.squeeze(), cos_f.squeeze(), sin_p.squeeze(), cos_p.squeeze(),
+                          l.squeeze(), a.squeeze(), A.squeeze())
 
+    def _compute_z(self, sin_t: torch.Tensor, cos_f: torch.Tensor,sin_f: torch.Tensor, cos_t: torch.Tensor):
+        """
+        input dims (batchsize, num_mixtures)
+        return dim (batchsize, num_mixtures, 3)
+        """
+        return torch.stack((sin_t * cos_f, sin_t * sin_f, cos_t), dim=2)
+
+    def _compute_x(self, cos_t: torch.Tensor, cos_f: torch.Tensor, cos_p: torch.Tensor, sin_f: torch.Tensor,
+                   sin_p: torch.Tensor, sin_t: torch.Tensor):
+        """
+        input dims (batchsize, num_mixtures)
+        return dim (batchsize, num_mixtures, 3)
+        """
+        return torch.stack((cos_t * cos_f * cos_p - sin_f * sin_p,
+                            cos_t * sin_f * cos_p + cos_f * sin_p,
+                            - sin_t * cos_p), dim=2)
+
+    def _compute_D(self, A: torch.Tensor, G: torch.Tensor, K: torch.Tensor) -> torch.Tensor:
+        """
+        A(batchsize, num_mixtures) :
+        G(batchsize, num_mixtures) :
+        K(batchsize, num_mixtures) :
+        return D(batchsize) :
+        """
+        return torch.sum(A*G/K, dim=1)
