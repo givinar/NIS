@@ -331,3 +331,7 @@ def get_test_samples_vectorized(points: np.ndarray):
 
 def taylor_softmax(x: torch.Tensor) -> torch.Tensor:
     return (1 + x + 0.5 * torch.pow(x, 2)) / (1 + x + 0.5 * torch.pow(x, 2)).sum(dim=1)[..., -1]
+
+
+def batch_dot(x: torch.Tensor, y: torch.Tensor, dim: int = 0) -> torch.Tensor:
+    return (x * y).sum(dim=dim)
