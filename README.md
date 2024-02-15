@@ -1,15 +1,17 @@
 # Neural Importance Sampling 
 
-## How to run code 
-Server:
+## How to run code
+* Create config file `some_config.conf` (example below)
+
+* Run NIS experiment:
 ```
-integration_experiment.py -c some_config.conf
+nis.py -c some_config.conf
 ```
 Example config file for normalizing flow:
 ```
 train
 {
-  function = Gaussian
+  function = Gaussian  # ImageFunc for image test
   epochs = 200
   batch_size = 100
   learning_rate = 0.0001
@@ -41,7 +43,7 @@ Example config file for NASG:
 ```
 train
 {
-  function = Gaussian
+  function = Gaussian  # ImageFunc for image test
   epochs = 200
   batch_size = 100
   learning_rate = 0.0001
