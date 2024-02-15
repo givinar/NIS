@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import transform
 from utils.utils import taylor_softmax, batch_dot
 from dataclasses import dataclass
@@ -114,6 +115,7 @@ class NASG(transform.Transform):
                             sin_f=nasg_params.sin_f, sin_p=nasg_params.sin_p, sin_t=nasg_params.sin_f)  # TODO change sin_t
         G = self._compute_G(z, x, z, nasg_params.l, nasg_params.a)  # TODO change first z to v
         K = self._compute_K(nasg_params.l, nasg_params.a)
+        v = self._sample_v(nasg_params)
         D = self._compute_D(nasg_params.A, G, K)
         raise NotImplementedError()
 
@@ -184,3 +186,8 @@ class NASG(transform.Transform):
         return D(batchsize) :
         """
         return torch.sum(A*G/K, dim=1)
+
+    def _sample_v(self, nasg_params: NasgParams):
+        mixtures_range = np.arange(self.num_mixtures)
+        mixture_idx = np.apply_along_axis(lambda x: np.random.choice(mixtures_range, p=x / x.sum()), 1, nasg_params.A.detach().cpu())
+        raise NotImplementedError
