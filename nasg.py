@@ -1,7 +1,10 @@
+import random
+from typing import Tuple
+
 import torch
 import numpy as np
 import transform
-from utils.utils import taylor_softmax, batch_dot
+from utils.utils import taylor_softmax, batch_dot, hemisphere_to_unit
 from dataclasses import dataclass
 
 NUM_NASG_PARAMETERS = 8
@@ -66,7 +69,6 @@ class NASG(transform.Transform):
         inputs : uniform x,y for NASG sampling
         context : features for network
         """
-
         if context.shape[1] != self.num_context_features:
             raise ValueError('Expected features = {}, got {}.'.format(
                 self.num_context_features, inputs.shape[1]))
@@ -107,17 +109,16 @@ class NASG(transform.Transform):
         nasg_params(batchsize, NUM_NASG_PARAMETERS * num_mixtures) : NASG parameter at the context
         """
         nasg_params = self._extract_nasg_parameters(nasg_params)
-
-        # need sin_t, v, may be from uniform input?
-        z = self._compute_z(sin_t=nasg_params.sin_f, cos_f=nasg_params.cos_f,  # TODO change sin_t
+        v, outputs = self._sample_v(inputs, nasg_params)
+        sin_t = torch.sqrt(1 - torch.pow(nasg_params.cos_t, 2))  # TODO check sin_t
+        z = self._compute_z(sin_t=sin_t, cos_f=nasg_params.cos_f,
                             sin_f=nasg_params.sin_f, cos_t=nasg_params.cos_t)
         x = self._compute_x(cos_t=nasg_params.cos_t, cos_f=nasg_params.cos_f, cos_p=nasg_params.cos_p,
-                            sin_f=nasg_params.sin_f, sin_p=nasg_params.sin_p, sin_t=nasg_params.sin_f)  # TODO change sin_t
-        G = self._compute_G(z, x, z, nasg_params.l, nasg_params.a)  # TODO change first z to v
+                            sin_f=nasg_params.sin_f, sin_p=nasg_params.sin_p, sin_t=sin_t)
+        G = self._compute_G(v, x, z, nasg_params.l, nasg_params.a)
         K = self._compute_K(nasg_params.l, nasg_params.a)
-        v = self._sample_v(nasg_params)
-        D = self._compute_D(nasg_params.A, G, K)
-        raise NotImplementedError()
+        absdet = self._compute_D(nasg_params.A, G, K)
+        return outputs, absdet
 
     def _nasg_transform_inverse(self, inputs, nasg_params):
         """
@@ -187,7 +188,38 @@ class NASG(transform.Transform):
         """
         return torch.sum(A*G/K, dim=1)
 
-    def _sample_v(self, nasg_params: NasgParams):
+    def _sample_v(self, inputs: torch.Tensor, nasg_params: NasgParams) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        input(batchsize, num_mixtures)
+        nasg_params
+        return v(batchsize, num_mixtures, 3), outputs(batchsize, 2) :
+        """
         mixtures_range = np.arange(self.num_mixtures)
-        mixture_idx = np.apply_along_axis(lambda x: np.random.choice(mixtures_range, p=x / x.sum()), 1, nasg_params.A.detach().cpu())
-        raise NotImplementedError
+        device = inputs.get_device() if inputs.is_cuda else torch.device('cpu')
+        mixture_idx = torch.tensor(np.apply_along_axis(lambda x: [np.random.choice(mixtures_range, p=x / x.sum())],
+                                                       1,
+                                                       nasg_params.A.detach().cpu()),
+                                   device=device, dtype=torch.int64)
+        l = nasg_params.l.gather(1, mixture_idx)
+        a = nasg_params.a.gather(1, mixture_idx)
+
+        min_s = torch.exp(-2 * l)
+        max_s = 1
+        s = inputs[..., 0][..., None] * (max_s - min_s) + min_s  # MinMaxScale
+
+        min_p = -torch.pi / 2
+        max_p = torch.pi / 2
+        p = inputs[..., 1][..., None] * (max_p - min_p) + min_p  # MinMaxScale
+        F_s = torch.arccos(2 *
+                           torch.pow(torch.log(s) / (2 * l) + 1, (1 + a - a * torch.pow(torch.cos(p), 2)) / (1 + a))
+                           - 1)  # theta
+        F_p = torch.arctan(torch.sqrt(1 + a) * torch.tan(p))  # phi
+
+        if random.random() > 0.5:
+            F_p += torch.pi
+        v = torch.stack((torch.sin(F_s) * torch.cos(F_p),
+                            torch.sin(F_s) * torch.sin(F_p),
+                            torch.cos(F_s)), dim=2).squeeze()  # spherical coordinates to cartesian
+        return torch.stack(list([v for _ in range(self.num_mixtures)]), dim=1), hemisphere_to_unit(v)
+
+

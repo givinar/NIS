@@ -417,9 +417,11 @@ class NeuralImportanceSampling:
                 visObject.AddCurves(x=epoch, x_err=0, title="Integral uncertainty", dict_val=dict_error)
                 visObject.AddPointSet(x, title="Observed $x$ %s" % self.config.transform_name, color='b')
                 visObject.AddPointSet(z, title="Latent space $z$", color='b')
-                x = self.integrator.sample(100000, jacobian=False).data.numpy()
+                feature = torch.full((100000, self.config.num_context_features), 0.123, dtype=torch.float32,
+                                     device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"))
+                x = self.integrator.sample(100000, jacobian=False, features=feature).data.numpy()
                 for _ in range(10):
-                    x = np.vstack((x, self.integrator.sample(100000, jacobian=False).data.numpy()))
+                    x = np.vstack((x, self.integrator.sample(100000, jacobian=False, features=feature).data.numpy()))
                 bins, x_edges, y_edges = np.histogram2d(1 - x[:, 0], 1 - x[:, 1], bins=100, range=[[0, 1], [0, 1]],
                                                         density=True)
                 x_centers = (x_edges[:-1] + x_edges[1:]) / 2

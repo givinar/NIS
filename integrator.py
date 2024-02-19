@@ -78,8 +78,7 @@ class Integrator:
         # But in the future we might change sampling dist so good to have
 
         # Process #
-        np.random.seed(42)
-        feature = np.random.rand(nsamples, self.flow.num_context_features, )
+        feature = np.full((nsamples, self.flow.num_context_features), 0.123)
         feature = torch.tensor(feature, dtype=torch.float32, device=torch.device('cuda'))
         x, absdet = self.flow(z, context=feature)
         # absdet *= torch.exp(log_prob) # P_X(x) = PZ(f^-1(x)) |det(df/dx)|^-1
@@ -139,7 +138,7 @@ class Integrator:
             return_dict["x"] = x.to("cpu")
         return return_dict
 
-    def sample(self, nsamples, latent=False, jacobian=True):
+    def sample(self, nsamples, latent=False, jacobian=True, features=None):
         """
         Sample from the trained distribution.
         Args:
@@ -152,7 +151,7 @@ class Integrator:
         if latent:
             return z.to("cpu")
         else:
-            x, absdet = self.flow(z)
+            x, absdet = self.flow(z, features)
             if jacobian:
                 return (x.to("cpu"), absdet.to("cpu"))
             else:

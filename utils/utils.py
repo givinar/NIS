@@ -335,3 +335,20 @@ def taylor_softmax(x: torch.Tensor) -> torch.Tensor:
 
 def batch_dot(x: torch.Tensor, y: torch.Tensor, dim: int = 0) -> torch.Tensor:
     return (x * y).sum(dim=dim)
+
+
+def hemisphere_to_unit(v: torch.Tensor) -> torch.Tensor:
+    """
+    v(batchsize, 3)
+    return (batchsize, 2)
+    """
+    t = torch.acos(torch.clamp(v[..., 2], -1, 1))
+    p = torch.asin(torch.clamp(v[..., 1] / torch.sin(t), -1, 1))
+
+    x = -torch.pow(torch.cos(t / 2), 2) + 1
+    y = p / (torch.pi * 2)
+    reversed_mask = y < 0
+    mask = y >= 0
+    y = -y * reversed_mask + y * mask
+    x = (1 - x) * reversed_mask + x * mask
+    return torch.stack((x, y), dim=1).squeeze()
