@@ -4,7 +4,7 @@ from typing import Tuple
 import torch
 import numpy as np
 import transform
-from utils.utils import taylor_softmax, batch_dot, hemisphere_to_unit
+from utils.utils import taylor_softmax, batch_dot, hemisphere_to_unit_by_v, hemisphere_to_unit_by_t_p
 from dataclasses import dataclass
 
 NUM_NASG_PARAMETERS = 8
@@ -194,12 +194,7 @@ class NASG(transform.Transform):
         nasg_params
         return v(batchsize, num_mixtures, 3), outputs(batchsize, 2) :
         """
-        mixtures_range = np.arange(self.num_mixtures)
-        device = inputs.get_device() if inputs.is_cuda else torch.device('cpu')
-        mixture_idx = torch.tensor(np.apply_along_axis(lambda x: [np.random.choice(mixtures_range, p=x / x.sum())],
-                                                       1,
-                                                       nasg_params.A.detach().cpu()),
-                                   device=device, dtype=torch.int64)
+        mixture_idx = torch.multinomial(nasg_params.A, 1)
         l = nasg_params.l.gather(1, mixture_idx)
         a = nasg_params.a.gather(1, mixture_idx)
 
@@ -215,11 +210,11 @@ class NASG(transform.Transform):
                            - 1)  # theta
         F_p = torch.arctan(torch.sqrt(1 + a) * torch.tan(p))  # phi
 
-        if random.random() > 0.5:
-            F_p += torch.pi
+        mask = torch.rand(F_p.shape[0], device=torch.device('cuda')) > 0.5
+        F_p += (torch.pi * mask)[..., None]
         v = torch.stack((torch.sin(F_s) * torch.cos(F_p),
                             torch.sin(F_s) * torch.sin(F_p),
                             torch.cos(F_s)), dim=2).squeeze()  # spherical coordinates to cartesian
-        return torch.stack(list([v for _ in range(self.num_mixtures)]), dim=1), hemisphere_to_unit(v)
+        return torch.stack(list([v for _ in range(self.num_mixtures)]), dim=1), hemisphere_to_unit_by_v(v)
 
 
