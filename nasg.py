@@ -109,7 +109,8 @@ class NASG(transform.Transform):
         nasg_params(batchsize, NUM_NASG_PARAMETERS * num_mixtures) : NASG parameter at the context
         """
         nasg_params = self._extract_nasg_parameters(nasg_params)
-        v, outputs = self._sample_v(inputs, nasg_params)
+        with torch.no_grad():
+            v, outputs = self._sample_v(inputs, nasg_params)
         sin_t = torch.sqrt(1 - torch.pow(nasg_params.cos_t, 2))  # TODO check sin_t
         z = self._compute_z(sin_t=sin_t, cos_f=nasg_params.cos_f,
                             sin_f=nasg_params.sin_f, cos_t=nasg_params.cos_t)
@@ -133,15 +134,15 @@ class NASG(transform.Transform):
         x(batchsize, NUM_NASG_PARAMETERS * num_mixtures) : NASG parameter at the context
         return NasgParams: dataclas with parameters. Parameters shape (batchsize,num_mixtures)
         """
-        x = x.resize(x.shape[0],self.num_mixtures, NUM_NASG_PARAMETERS)
+        x = x.resize(x.shape[0], self.num_mixtures, NUM_NASG_PARAMETERS)
         cos_params = x[..., :5]
         cos_params = torch.sigmoid(cos_params) * 2 - 1
         cos_t, sin_f, cos_f, sin_p, cos_p = torch.split(cos_params, 1, dim=2)
         l_a_params = torch.exp(x[..., [5, 6]])
         l, a = torch.split(l_a_params, 1, dim=2)
         A = taylor_softmax(x[..., 7])
-        return NasgParams(cos_t.squeeze(), sin_f.squeeze(), cos_f.squeeze(), sin_p.squeeze(), cos_p.squeeze(),
-                          l.squeeze(), a.squeeze(), A.squeeze())
+        return NasgParams(cos_t=cos_t.squeeze(), sin_f=sin_f.squeeze(), cos_f=cos_f.squeeze(), sin_p=sin_p.squeeze(),
+                          cos_p=cos_p.squeeze(), l=l.squeeze(), a=a.squeeze(), A=A.squeeze())
 
     def _compute_z(self, sin_t: torch.Tensor, cos_f: torch.Tensor,
                    sin_f: torch.Tensor, cos_t: torch.Tensor) -> torch.Tensor:
@@ -177,7 +178,7 @@ class NASG(transform.Transform):
         l, a: (batchsize, num_mixtures)
         return K (batchsize, num_mixtures)
         """
-        return 2 * torch.pi * (1 - torch.exp(-2 * l)) / (l * torch.sqrt(1 * a))
+        return 2 * torch.pi * (1 - torch.exp(-2 * l)) / (l * torch.sqrt(1 + a))
 
     def _compute_D(self, A: torch.Tensor, G: torch.Tensor, K: torch.Tensor) -> torch.Tensor:
         """
@@ -194,7 +195,7 @@ class NASG(transform.Transform):
         nasg_params
         return v(batchsize, num_mixtures, 3), outputs(batchsize, 2) :
         """
-        mixture_idx = torch.multinomial(nasg_params.A, 1)
+        mixture_idx = torch.multinomial(nasg_params.A, 1)  # Choose gaussian by A weight
         l = nasg_params.l.gather(1, mixture_idx)
         a = nasg_params.a.gather(1, mixture_idx)
 
@@ -212,9 +213,18 @@ class NASG(transform.Transform):
 
         mask = torch.rand(F_p.shape[0], device=torch.device('cuda')) > 0.5
         F_p += (torch.pi * mask)[..., None]
+
+        reversed_mask = F_p < 0
+        mask = F_p >= 0
+        F_p = (F_p + 2 * torch.pi) * reversed_mask + F_p * mask  # p [-pi/2; 3pi/2] -> [0; 2pi]. Is it correct?
+
         v = torch.stack((torch.sin(F_s) * torch.cos(F_p),
-                            torch.sin(F_s) * torch.sin(F_p),
-                            torch.cos(F_s)), dim=2).squeeze()  # spherical coordinates to cartesian
-        return torch.stack(list([v for _ in range(self.num_mixtures)]), dim=1), hemisphere_to_unit_by_v(v)
+                         torch.sin(F_s) * torch.sin(F_p),
+                         torch.cos(F_s)), dim=2).squeeze()  # spherical coordinates to cartesian. Is it correct?
+        # Need to get unit 2d coords [0; 1], then pass into warpHemisphere in RTB
+        # Try to use hemisphere_to_unit_by_v and hemisphere_to_unit_by_t_p, get different results. Is it correct?
+        outputs = hemisphere_to_unit_by_t_p(F_s, F_p)
+        v = torch.stack(list([v for _ in range(self.num_mixtures)]), dim=1)
+        return v, outputs
 
 

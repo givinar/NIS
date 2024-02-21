@@ -346,7 +346,7 @@ def hemisphere_to_unit_by_v(v: torch.Tensor) -> torch.Tensor:
     p = torch.asin(torch.clamp(v[..., 1] / torch.sin(t), -1, 1))
 
     x = -torch.pow(torch.cos(t / 2), 2) + 1
-    y = p / (torch.pi / 2)
+    y = p / (torch.pi * 2)
     reversed_mask = y < 0
     mask = y >= 0
     y = -y * reversed_mask + y * mask
@@ -361,7 +361,8 @@ def hemisphere_to_unit_by_t_p(t: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
     """
 
     x = -torch.pow(torch.cos(t / 2), 2) + 1
-    y = (p + torch.pi / 2) / (torch.pi * 2)  # TODO y = p / (torch.pi * 2) not works
+    y = p / (torch.pi * 2)
+
     reversed_mask = y < 0
     mask = y >= 0
     y = -y * reversed_mask + y * mask
